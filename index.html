@@ -9,14 +9,14 @@
 <title>Центр логистики · прототип</title>
 <link rel="preload" href="fonts/geologica-cyrillic-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/geologica-latin-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/fonts.css?v=19a0c95bf8">
-<link rel="stylesheet" href="css/app.css?v=19a0c95bf8">
+<link rel="stylesheet" href="css/fonts.css?v=07ecaaa19d">
+<link rel="stylesheet" href="css/app.css?v=07ecaaa19d">
 <script>/* страница показывается, когда шрифт загружен: без подмены шрифта и сдвигов */(function(d){var done=function(){window.__fr=1;if(window.__ar)d.classList.remove("fl")};if(document.fonts&&document.fonts.load){Promise.all(["400 14px Geologica","700 14px Geologica"].map(function(f){return document.fonts.load(f,"АБВабвABCabc0123")})).then(done,done)}else{done()}setTimeout(function(){d.classList.remove("fl")},1800)})(document.documentElement)</script>
 </head>
 <body>
 <header class="topbar">
   <div class="brand"><span class="mk" id="brandMark"></span>Центр логистики<small>прототип</small></div>
-  <div class="tb-roles"><span>Компьютер:</span><div class="seg" id="deskRoles"><button type="button" data-act="deskRole" data-role="admin">Администратор</button><button type="button" data-act="deskRole" data-role="manager">Менеджер в России</button></div></div>
+  <div class="tb-roles"><span>Компьютер:</span><div class="seg two" id="deskRoles"><button type="button" data-act="deskRole" data-role="admin"><b>Администратор</b><small>Рамиль: видит всё, деньги, отчёты</small></button><button type="button" data-act="deskRole" data-role="manager"><b>Менеджер в России</b><small>клиенты, отправки, трек-номера</small></button></div></div>
   <div class="tb-right">
     <button class="btn" type="button" data-act="scnOpen" id="btnScn"></button>
     <button class="btn ghost" type="button" data-act="reset" id="btnReset"></button>
@@ -36,7 +36,7 @@
   </section>
 
   <section class="pcol" aria-label="Экран телефона">
-    <div class="seg light" id="phoneRoles"><button type="button" data-act="phoneRole" data-role="warehouse">Склад в Китае</button><button type="button" data-act="phoneRole" data-role="client">Клиент<span class="dot" id="clientDot"></span></button></div>
+    <div class="seg light two" id="phoneRoles"><button type="button" data-act="phoneRole" data-role="warehouse"><b>Склад</b><small>Китай, приёмка</small></button><button type="button" data-act="phoneRole" data-role="client"><b>Клиент<span class="dot" id="clientDot"></span></b><small>свои грузы</small></button><button type="button" data-act="phoneRole" data-role="admin"><b>Админ</b><small>Рамиль</small></button></div>
     <div class="phone">
       <div class="screen">
         <div class="sbar"><span id="clock">9:41</span><span class="ind"><svg width="17" height="11" viewBox="0 0 17 11" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1" fill="#0f1b2d"/><rect x="4.6" y="5" width="3" height="6" rx="1" fill="#0f1b2d"/><rect x="9.2" y="2.6" width="3" height="8.4" rx="1" fill="#0f1b2d"/><rect x="13.8" y="0" width="3" height="11" rx="1" fill="#0f1b2d"/></svg><span class="bat"></span></span></div>
@@ -54,11 +54,11 @@
 <div class="ov" id="ov"><div class="card" id="ovCard"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/util.js?v=19a0c95bf8"></script>
-<script src="js/store.js?v=19a0c95bf8"></script>
-<script src="js/desk.js?v=19a0c95bf8"></script>
-<script src="js/phone.js?v=19a0c95bf8"></script>
-<script src="js/scenario.js?v=19a0c95bf8"></script>
-<script src="js/main.js?v=19a0c95bf8"></script>
+<script src="js/util.js?v=07ecaaa19d"></script>
+<script src="js/store.js?v=07ecaaa19d"></script>
+<script src="js/desk.js?v=07ecaaa19d"></script>
+<script src="js/phone.js?v=07ecaaa19d"></script>
+<script src="js/scenario.js?v=07ecaaa19d"></script>
+<script src="js/main.js?v=07ecaaa19d"></script>
 </body>
 </html>

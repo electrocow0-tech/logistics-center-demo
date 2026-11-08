@@ -52,7 +52,7 @@
     setOn("#deskRoles button", ui.deskRole); setOn("#phoneRoles button", ui.phoneRole);
     const unread = st.S.notes.some((n) => n.clientId === st.ME && !n.read);
     $("clientDot").classList.toggle("show", unread && ui.phoneRole !== "client");
-    $("pcap").textContent = ui.phoneRole === "client" ? "Телефон клиента: приложение открывается по ссылке, как у банков" : "Телефон сотрудника склада в Иу";
+    $("pcap").textContent = { client: "Телефон клиента: приложение открывается по ссылке, как у банков", admin: "Телефон администратора. Менеджер в России тоже работает с телефона", warehouse: "Телефон сотрудника склада в Иу" }[ui.phoneRole] || "";
   }
   function decorate() { if (App.scenario) App.scenario.decorate(); }
 
@@ -64,8 +64,9 @@
     chrome();
   }
   function renderPhone(anim) {
-    if (!App.P.screens[ui.phone]) { ui.phone = ui.phoneRole === "client" ? "ships" : "home"; ui.phoneP = null; }
-    let h; try { h = App.P.screens[ui.phone](ui.phoneP); } catch (e) { console.error(e); ui.phone = ui.phoneRole === "client" ? "ships" : "home"; ui.phoneP = null; h = App.P.screens[ui.phone](); }
+    const homeOf = { client: "ships", admin: "asum", warehouse: "home" };
+    if (!App.P.screens[ui.phone]) { ui.phone = homeOf[ui.phoneRole] || "home"; ui.phoneP = null; }
+    let h; try { h = App.P.screens[ui.phone](ui.phoneP); } catch (e) { console.error(e); ui.phone = homeOf[ui.phoneRole] || "home"; ui.phoneP = null; h = App.P.screens[ui.phone](); }
     $("ptabs").innerHTML = App.P.tabs(ui.phoneRole, ui.phone);
     anim ? swap($("phoneView"), h, $("phoneScroll"), decorate) : put($("phoneView"), h, decorate);
     if (ui.phoneRole === "client") st.readNotes();
@@ -139,7 +140,7 @@
   // ===== обработчики =====
   const acts = (App.acts = Object.assign(App.acts || {}, {
     deskRole: (d) => { if (d.role !== ui.deskRole) App.go.desk(d.role === "manager" ? "dispatch" : "board", null, d.role); },
-    phoneRole: (d) => { if (d.role !== ui.phoneRole) App.go.phone(d.role === "client" ? "ships" : "home", null, d.role); },
+    phoneRole: (d) => { if (d.role !== ui.phoneRole) App.go.phone({ client: "ships", admin: "asum", warehouse: "home" }[d.role], null, d.role); },
     d: (d) => App.go.desk(d.s, d.p || null, d.role || null),
     p: (d) => App.go.phone(d.s, d.p || null, d.role || null),
     closeDesk: () => closeDesk(),

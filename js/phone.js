@@ -8,11 +8,11 @@
   let photoSeq = 500;
 
   function tabs(role, cur) {
-    const map = role === "client"
-      ? [["ships", "box", "Грузы"], ["pay", "wallet", "Оплаты"], ["profile", "user", "Профиль"]]
+    const map = role === "client" ? [["ships", "box", "Грузы"], ["pay", "wallet", "Оплаты"], ["profile", "user", "Профиль"]]
+      : role === "admin" ? [["asum", "home", "Сводка"], ["aships", "box", "Грузы"], ["amoney", "wallet", "Деньги"]]
       : [["home", "list", "Задачи"], ["accept", "plus", "Приёмка"], ["pack", "layers", "Упаковка"]];
     const curTab = { ship: "ships", accepted: "accept", packForm: "pack", unk: "home" }[cur] || cur;
-    const badge = role === "warehouse" ? { pack: st.S.shipments.filter((s) => s.status === "in").length } : { pay: st.money(ME).debt ? 1 : 0 };
+    const badge = role === "warehouse" ? { pack: st.S.shipments.filter((s) => s.status === "in").length } : role === "client" ? { pay: st.money(ME).debt ? 1 : 0 } : {};
     return map.map(([k, ic, t]) => `<button type="button" class="${curTab === k ? "on" : ""}" data-act="p" data-s="${k}" data-tab="${k}">${I(ic)}${t}<i class="${badge[k] ? "show" : ""}">${badge[k] || ""}</i></button>`).join("");
   }
 
@@ -221,8 +221,66 @@
     </div>`;
   }
 
+
+  // ================= АДМИНИСТРАТОР НА ТЕЛЕФОНЕ =================
+  const EVL = { in: ["box", "Принят на складе"], pack: ["layers", "Упакован"], way: ["truck", "Отправлен из Китая"], arrived: ["pin", "Прибыл в Москву"], done: ["check", "Выдан клиенту"] };
+  const cn = (id) => (st.client(id) || {}).name || id;
+  function events(n) {
+    const ev = [];
+    st.S.shipments.forEach((s) => s.history.forEach((h) => ev.push({ at: h.at, ic: EVL[h.st][0], t: EVL[h.st][1] + " · " + s.id, sub: cn(s.clientId) + " · " + h.by })));
+    st.S.payments.forEach((p) => ev.push({ at: p.at, ic: "wallet", t: "Оплата " + u.money(p.amount), sub: cn(p.clientId) }));
+    return ev.sort((a, b) => b.at - a.at).slice(0, n);
+  }
+  function asum() {
+    const S = st.S, wh = S.shipments.filter((s) => s.status === "in" || s.status === "pack"), way = S.consignments.filter((c) => c.status === "way").sort((a, b) => a.eta - b.eta), m = st.money();
+    return `<div class="pp">${head("Сводка", "Рамиль · администратор")}
+      <div class="pay-hero"><span>На складе в Иу</span><strong>${wh.length} ${u.plural(wh.length, "поставка", "поставки", "поставок")}</strong><span>${u.vol(wh.reduce((a, s) => a + s.volume, 0))} · ${u.kg(wh.reduce((a, s) => a + s.weight, 0))}</span></div>
+      <div class="row" style="gap:10px;align-items:stretch;margin-bottom:10px">
+        <button class="pcard" type="button" data-act="p" data-s="aships" data-p="way" style="margin:0;flex:1;min-width:0;overflow:hidden"><span class="sub" style="margin:0">В пути</span><span class="id" style="font-size:22px;display:block">${way.length}</span><span class="sub">${way.length ? "ближайшая " + u.dShort(way[0].eta) : "нет"}</span></button>
+        <button class="pcard" type="button" data-act="p" data-s="amoney" style="margin:0;flex:1.3;min-width:0;overflow:hidden"><span class="sub" style="margin:0">Долг клиентов</span><span class="id" style="font-size:clamp(15px,1.4vw,19px);display:block;color:var(--alert);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.moneyShort(m.debt)}</span><span class="sub">${S.clients.filter((c) => st.money(c.id).debt).length} клиентов</span></button>
+      </div>
+      ${S.unknown.length ? `<button class="tile" type="button" data-act="aUnk"><span class="ti" style="background:var(--alert-soft);color:var(--alert)">${I("alert")}</span><span><b>Неопознанные грузы</b><small>ждут привязки к клиенту</small></span><span class="n">${S.unknown.length}</span></button>` : ""}
+      <div class="pcard"><div style="font-weight:700;margin-bottom:2px">Последние события</div>${events(6).map((e) => `<div class="pline" style="justify-content:flex-start;gap:12px"><span class="ti" style="width:32px;height:32px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex:none">${I(e.ic)}</span><span style="flex:1;min-width:0">${E(e.t)}<small>${E(e.sub)}</small></span><small style="white-space:nowrap">${u.when(e.at)}</small></div>`).join("")}</div>
+    </div>`;
+  }
+  const AF = { all: ["Все", ["in", "pack", "way", "arrived"]], wh: ["На складе", ["in", "pack"]], way: ["В пути", ["way"]], arr: ["Прибыли", ["arrived"]] };
+  function aships(p) {
+    const f = AF[p] ? p : "all";
+    const list = st.S.shipments.filter((s) => AF[f][1].includes(s.status)).sort((a, b) => b.createdAt - a.createdAt);
+    return `<div class="pp">${head("Грузы", "все клиенты")}
+      <div class="pseg" style="flex-wrap:wrap">${Object.entries(AF).map(([k, v]) => `<button type="button" class="${k === f ? "on" : ""}" data-act="p" data-s="aships" data-p="${k}">${v[0]}</button>`).join("")}</div>
+      ${list.map((s) => `<button class="pcard" type="button" data-act="aShip" data-id="${s.id}"><span class="t"><span class="id">${E(s.clientId)} · ${E(s.id)}</span>${pill(s.status)}</span><span class="m"><span>${u.places(s.places)}</span><span>${u.kg(s.weight)}</span><span>${u.vol(s.volume)}</span></span><span class="sub">${E(cn(s.clientId))}${s.cost ? " · " + u.money(s.cost) : ""}</span></button>`).join("") || '<p class="muted" style="font-size:13px">Пусто.</p>'}
+    </div>`;
+  }
+  function amoney() {
+    const m = st.money(), debtors = st.S.clients.map((c) => ({ c, d: st.money(c.id).debt })).filter((x) => x.d).sort((a, b) => b.d - a.d);
+    const now = Date.now(), paid30 = st.S.payments.filter((x) => now - x.at < 30 * u.DAY).reduce((a, x) => a + x.amount, 0);
+    return `<div class="pp">${head("Деньги", "оплаты и долги")}
+      <div class="pay-hero"><span>Долг клиентов</span><strong>${u.money(m.debt)}</strong><span>оплачено за 30 дней ${u.money(paid30)}</span></div>
+      <div class="pcard"><div style="font-weight:700;margin-bottom:2px">Кто должен</div>${debtors.map((x) => `<div class="pline"><span>${E(x.c.name)}<small>${E(x.c.id)}</small></span><span style="display:flex;align-items:center;gap:8px"><b style="color:var(--alert);white-space:nowrap">${u.money(x.d)}</b><button class="btn sm" type="button" data-act="aPay" data-c="${x.c.id}">Оплата</button></span></div>`).join("") || '<p class="muted" style="font-size:13px;margin:6px 0 0">Долгов нет</p>'}</div>
+    </div>`;
+  }
+
   // ---------- действия ----------
   Object.assign(App.acts, {
+    aShip: (x) => {
+      const s = st.ship(x.id); if (!s) return;
+      const ph = s.photos.slice(0, 2).map((p) => `<div class="ph-i">${u.photo(p)}</div>`).join("") + (s.packPhotos || []).slice(0, 1).map((p) => `<div class="ph-i">${u.photo(p, s.packType === "Обрешётка" ? "crate" : s.packType === "Мешок" ? "sack" : "box")}</div>`).join("");
+      App.sheet(`<div class="t" style="display:flex;justify-content:space-between;align-items:center"><h3>${E(s.id)}</h3>${pill(s.status)}</div><p style="margin:0 0 10px">${E(s.clientId)} · ${E(cn(s.clientId))} · ${E(s.supplier)}</p><div class="photos" style="margin-bottom:10px">${ph}</div>
+        <div class="pline"><span>Места, вес, объём</span><b>${u.places(s.places)} · ${u.kg(s.weight)} · ${u.vol(s.volume)}</b></div><div class="pline"><span>Стоимость</span><b>${s.cost ? u.money(s.cost) : "после упаковки"}</b></div>${s.consId ? `<div class="pline"><span>Отправка</span><b>${E(s.consId)}</b></div>` : ""}
+        <p class="muted" style="font-size:12px;margin-top:10px">Полная карточка с историей открывается и на компьютере.</p>`);
+    },
+    aPay: (x) => {
+      const d = st.money(x.c).debt;
+      App.sheet(`<h3>Оплата от клиента</h3><p>${E(cn(x.c))} · долг ${u.money(d)}</p><label class="fld"><span>Сумма, ₽</span><input class="inp" id="aPayAmt" inputmode="numeric" value="${d}"></label><button class="btn pri lg block mt" type="button" data-act="aPayGo" data-c="${x.c}">${I("check")}Сохранить оплату</button>`);
+    },
+    aPayGo: (x) => {
+      const v = parseInt(String(document.getElementById("aPayAmt").value).replace(/\D/g, ""), 10);
+      if (!v) { App.toast("Укажите сумму", "info"); return; }
+      st.pay(x.c, v); App.closeSheet(); App.toast(`Оплата ${u.money(v)} сохранена, клиент получил уведомление`, "wallet");
+    },
+    aUnk: () => App.sheet(`<h3>Неопознанные грузы</h3>${st.S.unknown.map((n) => `<div class="pcard" style="box-shadow:none;background:var(--soft)"><div class="t"><span class="id">${E(n.id)}</span><small class="muted">${u.when(n.at)}</small></div><div class="photos" style="grid-template-columns:1fr 2fr"><div class="ph-i">${u.photo(n.photo)}</div><div class="sub" style="margin:0;color:var(--ink-2)">${E(n.note)}<br>${u.places(n.places)} · ${u.kg(n.weight)}</div></div><div class="row mt" style="margin-top:8px"><select class="inp" style="height:38px;font-size:13px" id="aunk-${n.id}">${st.S.clients.map((c) => `<option value="${c.id}">${c.id} ${E(c.name)}</option>`).join("")}</select><button class="btn sm pri" type="button" data-act="aUnkGo" data-id="${n.id}">Привязать</button></div></div>`).join("") || "<p>Всё разобрано.</p>"}`),
+    aUnkGo: (x) => { const sel = document.getElementById("aunk-" + x.id); const sh = st.assignUnknown(x.id, sel.value); App.closeSheet(); if (sh) App.toast(`Груз привязан: ${sh.id}, ${cn(sh.clientId)}`, "check"); },
     accPhoto: () => { const d = draft(); d.photos.push(photoSeq++); document.getElementById("accCam").innerHTML = camHtml(d.photos, "accPhoto"); syncAccept(); },
     accPlaces: (x) => { const d = draft(); d.places = Math.max(1, (parseInt(d.places, 10) || 1) + parseInt(x.d, 10)); document.getElementById("accPlaces").value = d.places; syncAccept(); },
     accSample: () => { const d = draft(); d.code = "MSK-117"; const el = document.getElementById("accCode"); if (el) el.value = d.code; syncAccept(); const s = el && el.parentNode.parentNode.querySelector(".sug"); if (s) s.remove(); },
@@ -265,5 +323,5 @@
     packV: (v, el) => { packDraft(el.dataset.id).volume = v; syncPack(el.dataset.id); },
   });
 
-  App.P = { tabs, screens: { home, accept, accepted, pack: packList, packForm, unk, ships: shipsScreen, ship: shipScreen, pay: payScreen, profile } };
+  App.P = { tabs, screens: { home, accept, accepted, pack: packList, packForm, unk, ships: shipsScreen, ship: shipScreen, pay: payScreen, profile, asum, aships, amoney } };
 })(window.App);
