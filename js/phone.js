@@ -226,7 +226,8 @@
     accPhoto: () => { const d = draft(); d.photos.push(photoSeq++); document.getElementById("accCam").innerHTML = camHtml(d.photos, "accPhoto"); syncAccept(); },
     accPlaces: (x) => { const d = draft(); d.places = Math.max(1, (parseInt(d.places, 10) || 1) + parseInt(x.d, 10)); document.getElementById("accPlaces").value = d.places; syncAccept(); },
     accSample: () => { const d = draft(); d.code = "MSK-117"; const el = document.getElementById("accCode"); if (el) el.value = d.code; syncAccept(); const s = el && el.parentNode.parentNode.querySelector(".sug"); if (s) s.remove(); },
-    accFill: () => { App.tmp.draft = { code: "MSK-117", photos: [photoSeq++, photoSeq++], places: 8, weight: "96", volume: "0,64" }; App.refresh(true); },
+    accFill: () => { if (document.activeElement) document.activeElement.blur(); const d = draft(); App.tmp.draft = { code: d.code.trim() && hitClient(d.code) ? d.code : "MSK-117", photos: d.photos.length ? d.photos : [photoSeq++, photoSeq++], places: d.places > 1 ? d.places : 8, weight: d.weight || "96", volume: d.volume || "0,64" }; App.refresh(true); },
+    packFill: () => { if (document.activeElement) document.activeElement.blur(); const id = App.ui.phoneP, d = packDraft(id); d.packType = d.packType || "Обрешётка"; if (!d.photos.length) d.photos.push(photoSeq++); App.refresh(true); },
     accGo: () => {
       const d = draft(), c = hitClient(d.code); if (!c || missing(d).length) return;
       const sh = st.accept({ clientId: c.id, places: d.places, weight: parseFloat(String(d.weight).replace(",", ".")), volume: parseFloat(String(d.volume).replace(",", ".")), photos: d.photos });
