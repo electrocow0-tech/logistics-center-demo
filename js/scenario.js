@@ -109,17 +109,58 @@
   const spot = document.createElement("div"); spot.className = "spot";
   const coach = document.createElement("div"); coach.className = "coach"; coach.setAttribute("role", "status");
   document.body.append(spot, coach);
-  let cur = null, curKey = "", scrolledFor = "";
+  let cur = null, curKey = "", curHtml = "", coachMode = "", scrolledFor = "";
 
-  function scrollToTarget(el, key) {
-    if (scrolledFor === key) return;
-    scrolledFor = key;
-    const box = el.closest("#phoneScroll, #deskScroll, .drawer .db, #psheet, #modal");
-    if (!box) return;
-    const r = el.getBoundingClientRect(), c = box.getBoundingClientRect();
-    if (r.top < c.top + 16 || r.bottom > c.bottom - 16) box.scrollTo({ top: box.scrollTop + (r.top - c.top) - c.height * 0.3, behavior: "smooth" });
+  // ближайший прокручиваемый контейнер элемента (телефон, окно, шторка) или вся страница
+  function scrollBox(el) {
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (/(auto|scroll)/.test(cs.overflowY) && p.scrollHeight > p.clientHeight + 2) return p;
+    }
+    return null;
   }
-  function hide() { spot.classList.remove("show"); coach.classList.remove("show"); cur = null; curKey = ""; }
+  function reveal(el) {
+    const box = scrollBox(el), r = el.getBoundingClientRect();
+    if (box) {
+      const c = box.getBoundingClientRect();
+      if (r.top < c.top + 16 || r.bottom > c.bottom - 16) box.scrollTo({ top: box.scrollTop + (r.top - c.top) - c.height * 0.3, behavior: "smooth" });
+    }
+    const r2 = el.getBoundingClientRect();
+    if (r2.top < 70 || r2.bottom > innerHeight - 100) window.scrollTo({ top: scrollY + r2.top - innerHeight * 0.35, behavior: "smooth" });
+  }
+  function scrollToTarget(el, key) { if (scrolledFor === key) return; scrolledFor = key; reveal(el); }
+
+  // видимая часть элемента: обрезаем по всем предкам с overflow и по окну браузера
+  function visible(el) {
+    const r = el.getBoundingClientRect();
+    let t = r.top, b = r.bottom, l = r.left, rt = r.right, box = null;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.overflowY !== "visible" || cs.overflowX !== "visible") {
+        const c = p.getBoundingClientRect();
+        if (!box) box = c;
+        t = Math.max(t, c.top); b = Math.min(b, c.bottom); l = Math.max(l, c.left); rt = Math.min(rt, c.right);
+      }
+    }
+    t = Math.max(t, 0); b = Math.min(b, innerHeight);
+    // видна только узкая полоска или ничего: считаем, что элемент за краем
+    if (b - t < Math.min(28, r.height * 0.5)) {
+      const c = box || { top: 0, bottom: innerHeight, left: 0, right: innerWidth };
+      const clip = { top: Math.max(c.top, 0), bottom: Math.min(c.bottom, innerHeight), left: c.left, right: c.right };
+      const dir = r.top + r.height / 2 < (clip.top + clip.bottom) / 2 ? "up" : "down";
+      return { off: true, dir, clip };
+    }
+    return { off: false, r: { left: l, top: t, right: rt, bottom: b, width: rt - l, height: b - t } };
+  }
+  function setCoach(mode, dir) {
+    const key = mode + (dir || "");
+    if (coachMode === key) return;
+    coachMode = key;
+    coach.innerHTML = mode === "on" ? curHtml
+      : `<i class="arw"></i><small>Шаг ${sc().step + 1} из ${N}</small><p>Нужный элемент ${dir === "up" ? "выше" : "ниже"}. Прокрутите ${dir === "up" ? "вверх" : "вниз"} или нажмите «Показать».</p><div class="ca"><button class="btn sm pri" type="button" data-act="scnFocus">${I(dir === "up" ? "back" : "chevron")}Показать</button></div>`;
+    const a = coach.querySelector(".ca .ic"); if (a && mode !== "on") a.style.transform = "rotate(90deg)";
+  }
+  function hide() { spot.classList.remove("show"); coach.classList.remove("show"); cur = null; curKey = ""; coachMode = ""; }
   function decorate() {
     const s = sc();
     if (!s.on || $("ov").classList.contains("show")) { hide(); return; }
@@ -129,9 +170,8 @@
     const key = s.step + "|" + h.sel + "|" + h.tip;
     cur = el;
     if (key !== curKey) {
-      curKey = key;
-      coach.innerHTML = `<i class="arw"></i><small>Шаг ${s.step + 1} из ${N} · ${E(step.who[1])}</small><p>${E(h.tip)}</p>${h.act ? `<div class="ca"><button class="btn sm${h.pri ? " pri" : ""}" type="button" data-act="${h.act}">${E(h.actLabel)}</button></div>` : ""}`;
-      coach.classList.remove("show"); void coach.offsetWidth;
+      curKey = key; coachMode = "";
+      curHtml = `<i class="arw"></i><small>Шаг ${s.step + 1} из ${N} · ${E(step.who[1])}</small><p>${E(h.tip)}</p>${h.act ? `<div class="ca"><button class="btn sm${h.pri ? " pri" : ""}" type="button" data-act="${h.act}">${E(h.actLabel)}</button></div>` : ""}`;
       scrollToTarget(el, s.step + "|" + h.sel);
     }
     place(true);
@@ -139,28 +179,40 @@
   let last = "";
   function place(force) {
     if (!cur || !cur.isConnected) { if (cur) decorate(); return; }
-    const r = cur.getBoundingClientRect();
-    const sig = [r.left, r.top, r.width, r.height].map(Math.round).join(",");
+    const v = visible(cur);
+    const sig = v.off ? "off" + v.dir + Math.round(v.clip.top) + Math.round(v.clip.left) : [v.r.left, v.r.top, v.r.width, v.r.height].map(Math.round).join(",");
     if (!force && sig === last) return;
     last = sig;
-    if (r.width === 0 && r.height === 0) { spot.classList.remove("show"); coach.classList.remove("show"); return; }
-    const pad = 6;
-    Object.assign(spot.style, { transform: `translate3d(${r.left - pad}px,${r.top - pad}px,0)`, width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
-    spot.classList.add("show");
-    // подсказка: слева, справа, снизу или сверху от элемента, в пределах окна
-    const W = innerWidth, H = innerHeight, cw = Math.min(300, W - 24), ch = coach.offsetHeight || 110, gap = 16;
+    const W = innerWidth, H = innerHeight, cw = Math.min(300, W - 24), gap = 16;
     coach.style.width = cw + "px";
-    let side, x, y;
-    if (r.left - cw - gap > 8) { side = "l"; x = r.left - cw - gap; y = r.top + r.height / 2 - ch / 2; }
-    else if (r.right + cw + gap < W - 8) { side = "r"; x = r.right + gap; y = r.top + r.height / 2 - ch / 2; }
-    else if (r.bottom + ch + gap < H - 8) { side = "b"; x = r.left + r.width / 2 - cw / 2; y = r.bottom + gap; }
-    else { side = "t"; x = r.left + r.width / 2 - cw / 2; y = r.top - ch - gap; }
+    let side, x, y, ax, ay;
+    if (v.off) {
+      // элемент прокручен за край: снимаем затемнение, подсказка у края контейнера
+      spot.classList.remove("show");
+      setCoach("off", v.dir);
+      const ch = coach.offsetHeight || 110, c = v.clip;
+      x = (c.left + c.right) / 2 - cw / 2;
+      if (v.dir === "up") { side = "b"; y = c.top + 12; } else { side = "t"; y = c.bottom - ch - 12; }
+      ax = (c.left + c.right) / 2; ay = null;
+    } else {
+      setCoach("on");
+      const r = v.r, pad = 6;
+      Object.assign(spot.style, { transform: `translate3d(${r.left - pad}px,${r.top - pad}px,0)`, width: r.width + pad * 2 + "px", height: r.height + pad * 2 + "px" });
+      spot.classList.add("show");
+      const ch = coach.offsetHeight || 110;
+      if (r.left - cw - gap > 8) { side = "l"; x = r.left - cw - gap; y = r.top + r.height / 2 - ch / 2; }
+      else if (r.right + cw + gap < W - 8) { side = "r"; x = r.right + gap; y = r.top + r.height / 2 - ch / 2; }
+      else if (r.bottom + ch + gap < H - 8) { side = "b"; x = r.left + r.width / 2 - cw / 2; y = r.bottom + gap; }
+      else { side = "t"; x = r.left + r.width / 2 - cw / 2; y = r.top - ch - gap; }
+      ax = r.left + r.width / 2; ay = r.top + r.height / 2;
+    }
+    const ch = coach.offsetHeight || 110;
     x = Math.max(8, Math.min(W - cw - 8, x)); y = Math.max(8, Math.min(H - ch - 8, y));
     coach.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`; coach.dataset.side = side;
     const arw = coach.querySelector(".arw");
     if (arw) {
-      if (side === "l" || side === "r") { arw.style.top = Math.max(14, Math.min(ch - 26, r.top + r.height / 2 - y - 6)) + "px"; arw.style.left = ""; }
-      else { arw.style.left = Math.max(14, Math.min(cw - 26, r.left + r.width / 2 - x - 6)) + "px"; arw.style.top = ""; }
+      if (side === "l" || side === "r") { arw.style.top = Math.max(14, Math.min(ch - 26, ay - y - 6)) + "px"; arw.style.left = ""; }
+      else { arw.style.left = Math.max(14, Math.min(cw - 26, ax - x - 6)) + "px"; arw.style.top = ""; }
     }
     coach.classList.add("show");
   }
@@ -205,6 +257,7 @@
     scnStart: () => start(),
     scnOpen: () => { if (sc().on) { scrolledFor = ""; STEPS[sc().step].go(); setTimeout(decorate, 420); } else start(); },
     scnShow: () => { scrolledFor = ""; STEPS[sc().step].go(); setTimeout(decorate, 420); },
+    scnFocus: () => { if (cur) reveal(cur); },
     scnNext: () => goStep(sc().step + 1),
     scnEnd: () => { const fin = STEPS[sc().step].final; stop(fin); if (fin) App.toast("Спасибо! Дальше можно осматриваться самостоятельно", "check"); },
   });
