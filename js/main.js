@@ -194,4 +194,6 @@
       <div class="of"><button class="btn pri lg" type="button" data-act="scnStart">${u.icon("play")}Пройти сценарий, 2 минуты</button><button class="btn lg" type="button" data-act="introClose">Осмотреться самостоятельно</button></div>`), 350);
   }
   acts.introClose = () => { ui.introSeen = true; App.saveUI(); App.closeOverlay(); };
+  // показываем страницу, когда готовы и шрифт, и интерфейс: без пустых кнопок и сдвигов
+  window.__ar = 1; if (window.__fr) document.documentElement.classList.remove("fl");
 })(window.App);
