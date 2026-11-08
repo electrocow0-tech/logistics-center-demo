@@ -81,8 +81,24 @@ window.App = window.App || {};
   // Детерминированный генератор случайных чисел для картинок
   function rng(seed) { let s = (seed * 9301 + 49297) % 233280 || 1; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
 
-  // «Фото» груза: изометрическая коробка, обрешётка или мешок на фоне склада
+  // Реальные фото грузов (свободная лицензия, лежат локально в img/): приёмка и виды упаковки
+  const PHOTOS = {
+    recv: ["recv-01.jpg", "recv-02.jpg", "recv-03.jpg", "recv-04.jpg", "recv-05.jpg", "recv-06.jpg"],
+    box: ["pack-box-01.jpg", "pack-box-02.jpg"],
+    pallet: ["pack-pallet-01.jpg", "pack-pallet-02.jpg"],
+    crate: ["pack-crate-01.jpg", "pack-crate-02.jpg"],
+    sack: ["pack-sack-01.jpg", "pack-sack-02.jpg"],
+  };
+  const packKind = (t) => ({ "Обрешётка": "crate", "Мешок": "sack", "Паллета": "pallet" }[t] || "box");
   function photo(seed, kind) {
+    const pool = PHOTOS[kind] || PHOTOS.recv;
+    const f = pool[Math.abs(Math.round(seed)) % pool.length];
+    return `<img src="img/${f}" alt="" width="640" height="480" decoding="async" draggable="false">`;
+  }
+  const allPhotos = () => Object.values(PHOTOS).flat();
+
+  // Нарисованная коробка (запасной вариант, если фото не загрузились)
+  function photoSvg(seed, kind) {
     const r = rng(seed + 11);
     const tones = [["#d9b47c", "#c39558", "#a97a40"], ["#d4ab73", "#b98a4e", "#9c6f36"], ["#e0be8a", "#c9a067", "#ad8248"], ["#cfa66d", "#b48449", "#946a33"]];
     const t = tones[Math.floor(r() * tones.length)];
@@ -151,5 +167,5 @@ window.App = window.App || {};
     } catch (e) { return false; }
   }
 
-  App.u = { NB, esc, plural, groups, money, moneyShort, kg, vol, places, dShort, dLong, hm, when, DAY, icon, photo, qr, download, pad };
+  App.u = { NB, esc, plural, groups, money, moneyShort, kg, vol, places, dShort, dLong, hm, when, DAY, icon, photo, photoSvg, packKind, allPhotos, qr, download, pad };
 })(window.App);

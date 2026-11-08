@@ -3,7 +3,7 @@
   "use strict";
   const u = App.u, st = App.store, I = u.icon, E = u.esc;
   const pill = (s, lg) => `<span class="st${lg ? " lg" : ""}" data-st="${s}">${st.STATUS[s].t}</span>`;
-  const optBtn = (k, label) => `<button class="opt" type="button" data-act="opt" data-k="${k}">${I((App.OPT[k] || {}).icon || "spark")}${E(label)}<i>опция</i></button>`;
+  const optBtn = (k, label) => `<button class="opt" type="button" data-act="opt" data-k="${k}">${I((App.OPT[k] || {}).icon || "spark")}<span class="ol">${E(label)}</span><i>опция</i></button>`;
   const ME = st.ME;
   let photoSeq = 500;
 
@@ -176,9 +176,10 @@
     const bell = `<button class="x" type="button" data-act="notes" aria-label="Уведомления" style="background:var(--white);box-shadow:var(--sh-1)">${I("bell")}</button>`;
     return `<div class="pp">${clientHead("Мои грузы", bell)}
       ${debt ? `<button class="pcard" type="button" data-act="p" data-s="pay" style="background:var(--warn-soft);box-shadow:none"><span class="t"><span style="font-weight:600;font-size:13px">К оплате ${u.money(debt)}</span>${I("chevron")}</span></button>` : ""}
+      <div class="opts-row">${optBtn("clientChat", "Написать менеджеру")}${optBtn("calc", "Рассчитать доставку")}</div>
       <div class="pseg"><button type="button" class="${tab === "active" ? "on" : ""}" data-act="p" data-s="ships">Активные · ${act.length}</button><button type="button" class="${tab === "archive" ? "on" : ""}" data-act="p" data-s="ships" data-p="archive">Архив · ${arc.length}</button></div>
       ${list.map((s) => `<button class="pcard" type="button" data-act="p" data-s="ship" data-p="${s.id}" data-cs="${s.id}"><span class="t"><span class="id">${E(s.id)}</span>${pill(s.status)}</span>
-        <span class="photos">${s.photos.slice(0, 2).concat(s.packPhotos || []).slice(0, 3).map((x, i) => `<span class="ph-i">${u.photo(x, i >= s.photos.slice(0, 2).length ? (s.packType === "Обрешётка" ? "crate" : s.packType === "Мешок" ? "sack" : "box") : null)}</span>`).join("")}</span>
+        <span class="photos">${s.photos.slice(0, 2).concat(s.packPhotos || []).slice(0, 3).map((x, i) => `<span class="ph-i">${u.photo(x, i >= s.photos.slice(0, 2).length ? (u.packKind(s.packType)) : null)}</span>`).join("")}</span>
         <span class="m"><span>${u.places(s.places)}</span><span>${u.kg(s.weight)}</span><span>${u.vol(s.volume)}</span></span><span class="sub">${E(subLine(s))}</span></button>`).join("") || '<p class="muted" style="font-size:13px">Здесь пока пусто.</p>'}
     </div>`;
   }
@@ -189,10 +190,11 @@
     const labels = { in: "Принят на складе в Иу", pack: "Упакован", way: "Отправлен из Китая", arrived: "Прибыл в Москву, можно забирать", done: "Выдан" };
     return `<div class="pp"><div class="pback" data-act="p" data-s="ships">${I("back")}Мои грузы</div>
       <div class="phead"><div><small>${E(s.supplier)}</small><h2>${E(s.id)}</h2></div>${pill(s.status, true)}</div>
-      <div class="photos" style="margin-bottom:10px">${s.photos.map((p) => `<div class="ph-i">${u.photo(p)}<em>склад</em></div>`).join("")}${(s.packPhotos || []).map((p) => `<div class="ph-i">${u.photo(p, s.packType === "Обрешётка" ? "crate" : s.packType === "Мешок" ? "sack" : "box")}<em>упаковка</em></div>`).join("")}</div>
+      <div class="photos" style="margin-bottom:10px">${s.photos.map((p) => `<div class="ph-i">${u.photo(p)}<em>склад</em></div>`).join("")}${(s.packPhotos || []).map((p) => `<div class="ph-i">${u.photo(p, u.packKind(s.packType))}<em>упаковка</em></div>`).join("")}</div>
       ${cs ? `<div class="pcard" data-hl="client-track"><div class="t"><span style="font-size:12px;color:var(--muted)">Трек-номер</span><span class="muted" style="font-size:12px">${E(st.TRANSPORT[cs.transport].label)}</span></div><div class="t" style="margin-top:2px"><span class="id" style="font-size:18px">${E(cs.id)}</span><span style="font-size:12.5px;font-weight:600">${cs.status === "way" ? "≈" + u.NB + u.dLong(cs.eta) : "прибыл"}</span></div></div>` : ""}
       <div class="pcard"><ol class="tl">${order.map((k, i) => { const h = s.history.find((x) => x.st === k); return `<li class="${i < idx ? "done" : i === idx ? (k === "done" ? "done" : "cur") : "todo"}"><b>${labels[k]}</b><small>${h ? u.dShort(h.at) + " · " + u.hm(h.at) : k === "arrived" && cs && cs.status === "way" ? "ожидается " + u.dLong(cs.eta) : ""}</small></li>`; }).join("")}</ol></div>
       <div class="pcard"><div class="pline"><span>Места</span><b>${u.places(s.places)}</b></div><div class="pline"><span>Вес</span><b>${u.kg(s.weight)}</b></div><div class="pline"><span>Объём</span><b>${u.vol(s.volume)}</b></div>${s.packType ? `<div class="pline"><span>Упаковка</span><b>${E(s.packType)}</b></div>` : ""}<div class="pline"><span>Стоимость</span><b>${s.cost ? u.money(s.cost) : "после упаковки"}</b></div></div>
+      <div class="opts-row">${optBtn("clientChat", "Вопрос по этому грузу")}</div>
     </div>`;
   }
   function payScreen() {
@@ -203,6 +205,7 @@
     const pays = st.S.payments.filter((p) => p.clientId === ME).sort((a, b) => b.at - a.at);
     return `<div class="pp">${clientHead("Оплаты")}
       <div class="pay-hero" data-hl="client-pay"><span>${m.debt ? "К оплате" : "Долга нет"}</span><strong>${u.money(m.debt)}</strong><button class="btn sm" type="button" data-act="reqs">${I("file")}Реквизиты для оплаты</button></div>
+      <div class="opts-row">${optBtn("sbp", "Оплатить по СБП")}</div>
       <div class="pcard"><div style="font-weight:700;margin-bottom:2px">Начисления</div>${charges.map((x) => `<div class="pline"><span>${E(x.s.id)}<small>${u.dShort(x.s.createdAt)} · ${u.vol(x.s.volume)}</small></span><span style="text-align:right"><b>${u.money(x.s.cost)}</b><small style="color:${x.paid ? "var(--accent-d)" : "var(--warn)"}">${x.paid ? "оплачено" : "к оплате"}</small></span></div>`).join("") || '<p class="muted">Начислений нет</p>'}</div>
       <div class="pcard"><div style="font-weight:700;margin-bottom:2px">История оплат</div>${pays.map((p) => `<div class="pline"><span>${u.dLong(p.at)}</span><b>${u.money(p.amount)}</b></div>`).join("") || '<p class="muted" style="font-size:13px;margin:6px 0 0">Оплат пока не было</p>'}</div>
     </div>`;
@@ -216,7 +219,8 @@
       <div class="pcard"><div style="font-weight:700;margin-bottom:2px">Уведомления</div>
         <div class="pline"><span>В приложении<small>статусы, фото, оплаты</small></span><span class="st" data-st="in">включено</span></div>
         <div class="pline"><span>Telegram<small>${st.S.tg ? "подключён" : "дублировать уведомления в Telegram"}</small></span>${st.S.tg ? '<span class="st" data-st="in">включено</span>' : '<button class="btn sm" type="button" data-act="tgOn">Подключить</button>'}</div>
-        <div class="pline"><span>WhatsApp</span>${optBtn("whatsapp", "WhatsApp")}</div></div>
+        <div class="pline"><span>WhatsApp</span>${optBtn("whatsapp", "Подключить")}</div>
+        <div class="pline"><span>Бот «Где мой груз?»</span>${optBtn("tgbot", "Подключить")}</div></div>
       <div class="pcard"><div class="pline"><span>Компания</span><b>${E(c.name)}</b></div><div class="pline"><span>Контакт</span><b>${E(c.person)}</b></div><div class="pline"><span>Ваш код</span><b>${E(c.id)}</b></div></div>
     </div>`;
   }
@@ -265,7 +269,7 @@
   Object.assign(App.acts, {
     aShip: (x) => {
       const s = st.ship(x.id); if (!s) return;
-      const ph = s.photos.slice(0, 2).map((p) => `<div class="ph-i">${u.photo(p)}</div>`).join("") + (s.packPhotos || []).slice(0, 1).map((p) => `<div class="ph-i">${u.photo(p, s.packType === "Обрешётка" ? "crate" : s.packType === "Мешок" ? "sack" : "box")}</div>`).join("");
+      const ph = s.photos.slice(0, 2).map((p) => `<div class="ph-i">${u.photo(p)}</div>`).join("") + (s.packPhotos || []).slice(0, 1).map((p) => `<div class="ph-i">${u.photo(p, u.packKind(s.packType))}</div>`).join("");
       App.sheet(`<div class="t" style="display:flex;justify-content:space-between;align-items:center"><h3>${E(s.id)}</h3>${pill(s.status)}</div><p style="margin:0 0 10px">${E(s.clientId)} · ${E(cn(s.clientId))} · ${E(s.supplier)}</p><div class="photos" style="margin-bottom:10px">${ph}</div>
         <div class="pline"><span>Места, вес, объём</span><b>${u.places(s.places)} · ${u.kg(s.weight)} · ${u.vol(s.volume)}</b></div><div class="pline"><span>Стоимость</span><b>${s.cost ? u.money(s.cost) : "после упаковки"}</b></div>${s.consId ? `<div class="pline"><span>Отправка</span><b>${E(s.consId)}</b></div>` : ""}
         <p class="muted" style="font-size:12px;margin-top:10px">Полная карточка с историей открывается и на компьютере.</p>`);
@@ -298,7 +302,7 @@
       App.tmp.draft = null; App.toast(`Груз ${n.id} принят в неопознанные, менеджер разберёт`, "alert"); App.go.phone("unk");
     },
     packType: (x) => { const d = packDraft(x.id); d.packType = x.k; document.querySelectorAll('[data-act="packType"]').forEach((b) => b.classList.toggle("on", b.dataset.k === x.k)); syncPack(x.id); },
-    packPhoto: () => { const id = App.ui.phoneP, s = st.ship(id), d = packDraft(id); d.photos.push(photoSeq++); const kind = d.packType === "Обрешётка" ? "crate" : d.packType === "Мешок" ? "sack" : "box"; document.getElementById("packCam").innerHTML = `<div class="cam">${d.photos.map((p) => `<div class="shot">${u.photo(p, kind)}</div>`).join("")}${d.photos.length < 3 ? `<button class="add" type="button" data-act="packPhoto">${I("camera")}<span>Ещё фото</span></button>` : ""}</div>`; syncPack(id); void s; },
+    packPhoto: () => { const id = App.ui.phoneP, s = st.ship(id), d = packDraft(id); d.photos.push(photoSeq++); const kind = u.packKind(d.packType); document.getElementById("packCam").innerHTML = `<div class="cam">${d.photos.map((p) => `<div class="shot">${u.photo(p, kind)}</div>`).join("")}${d.photos.length < 3 ? `<button class="add" type="button" data-act="packPhoto">${I("camera")}<span>Ещё фото</span></button>` : ""}</div>`; syncPack(id); void s; },
     packGo: (x) => {
       const d = packDraft(x.id); if (packMissing(d).length) return;
       st.pack(x.id, { packType: d.packType, weight: parseFloat(String(d.weight).replace(",", ".")), volume: parseFloat(String(d.volume).replace(",", ".")), photos: d.photos });

@@ -4,7 +4,7 @@
   const u = App.u, st = App.store, I = u.icon, E = u.esc;
   const ACTIVE = ["in", "pack", "way", "arrived"];
   const pill = (s, lg) => `<span class="st${lg ? " lg" : ""}" data-st="${s}">${st.STATUS[s].t}</span>`;
-  const optBtn = (k, label) => `<button class="opt" type="button" data-act="opt" data-k="${k}">${I(App.OPT ? (App.OPT[k] || {}).icon || "spark" : "spark")}${E(label)}<i>опция</i></button>`;
+  const optBtn = (k, label) => `<button class="opt" type="button" data-act="opt" data-k="${k}">${I(App.OPT ? (App.OPT[k] || {}).icon || "spark" : "spark")}<span class="ol">${E(label)}</span><i>опция</i></button>`;
   const cname = (id) => (st.client(id) || {}).name || id;
 
   const TITLES = { board: "поставки", clients: "клиенты", client: "клиенты", cons: "отправки", dispatch: "отгрузка", finance: "финансы", reports: "отчёты", staff: "сотрудники", included: "что входит" };
@@ -26,7 +26,7 @@
     const c = counts(), curNav = cur === "client" ? "clients" : cur;
     const items = NAV[role].map(([k, ic, t]) => `<a data-act="d" data-s="${k}" class="${curNav === k ? "on" : ""}" data-nav="${k}">${I(ic)}${t}${c[k] != null ? `<b>${c[k]}</b>` : ""}</a>`).join("");
     return `<div class="nav">${items}</div><div class="sep"></div>
-      <div class="nav"><a data-act="d" data-s="included" class="${cur === "included" ? "on" : ""}">${I("grid")}Что входит</a><a class="optn" data-act="opt" data-k="chat">${I("chat")}Чат-переводчик<i>опция</i></a></div>
+      <div class="nav"><a data-act="d" data-s="included" class="${cur === "included" ? "on" : ""}">${I("grid")}Что входит</a><a class="optn" data-act="opt" data-k="chat">${I("chat")}Чат-переводчик<i>опция</i></a><a class="optn" data-act="opt" data-k="clientChat">${I("users")}Чат с клиентами<i>опция</i></a></div>
       <div class="me"><span class="ava">${R.ava}</span><span>${E(R.name)}<small>${E(R.role)}</small></span></div>`;
   }
 
@@ -87,7 +87,7 @@
   function shipDrawer(id) {
     const s = st.ship(id); if (!s) return "";
     const c = st.client(s.clientId), cs = s.consId ? st.cons(s.consId) : null;
-    const ph = s.photos.map((p, i) => `<div class="ph-i">${u.photo(p)}<em>приёмка ${i + 1}</em></div>`).join("") + (s.packPhotos || []).map((p) => `<div class="ph-i">${u.photo(p, s.packType === "Обрешётка" ? "crate" : s.packType === "Мешок" ? "sack" : "box")}<em>упаковка</em></div>`).join("");
+    const ph = s.photos.map((p, i) => `<div class="ph-i">${u.photo(p)}<em>приёмка ${i + 1}</em></div>`).join("") + (s.packPhotos || []).map((p) => `<div class="ph-i">${u.photo(p, u.packKind(s.packType))}<em>упаковка</em></div>`).join("");
     return `<div class="dh"><div><h2>${E(s.id)}</h2></div>${pill(s.status, true)}<button class="x" type="button" data-act="closeDesk" aria-label="Закрыть">${I("x")}</button></div>
       <div class="db">
         <div class="row"><span class="tag code">${E(c.id)}</span><span class="lnk" data-act="d" data-s="client" data-p="${c.id}">${E(c.name)}</span><span class="muted">${E(c.city)}</span></div>
@@ -130,8 +130,8 @@
         <div class="kpi ${m.debt ? "bad" : "hero"}"><span>Долг</span><strong>${m.debt ? u.money(m.debt) : "нет"}</strong><small>${m.debt ? '<span class="lnk" data-act="payModal" data-c="' + c.id + '">Отметить оплату</span>' : "всё оплачено"}</small></div>
       </div>
       <div class="grid2">
-        <div class="box" style="padding:0;overflow:hidden"><table class="tbl" style="box-shadow:none;border-radius:0"><thead><tr><th>Поставка</th><th>Статус</th><th class="r">Места</th><th class="r">Объём</th><th class="r">Стоимость</th></tr></thead><tbody>
-          ${mine.map((s) => `<tr class="click" data-act="openShip" data-id="${s.id}"><td><b>${E(s.id)}</b><span class="muted ell" style="font-size:12px">${u.dShort(s.createdAt)} · ${E(s.supplier)}</span></td><td>${pill(s.status)}</td><td class="r">${s.places}</td><td class="r">${u.vol(s.volume)}</td><td class="r">${s.cost ? u.money(s.cost) : "—"}</td></tr>`).join("")}
+        <div class="box" style="padding:0;overflow:hidden"><table class="tbl" style="box-shadow:none;border-radius:0"><thead><tr><th>Поставка</th><th>Статус</th><th class="r">Объём</th><th class="r">Стоимость</th></tr></thead><tbody>
+          ${mine.map((s) => `<tr class="click" data-act="openShip" data-id="${s.id}"><td><b>${E(s.id)}</b><span class="muted ell" style="font-size:12px">${u.dShort(s.createdAt)} · ${E(s.supplier)}</span></td><td>${pill(s.status)}</td><td class="r">${u.vol(s.volume)}</td><td class="r">${s.cost ? u.money(s.cost) : "—"}</td></tr>`).join("")}
         </tbody></table></div>
         <div style="display:grid;gap:14px">
           <div class="box"><h3>${I("pin")}Адрес склада для поставщиков</h3><p style="margin:0 0 8px;font-size:13px">Клиент отправляет этот адрес своим поставщикам в Китае, они пишут код на каждой коробке.</p>
@@ -148,17 +148,17 @@
       const ships = c.shipIds.map(st.ship).filter(Boolean);
       const pl = ships.reduce((a, s) => a + s.places, 0), w = ships.reduce((a, s) => a + s.weight, 0), v = ships.reduce((a, s) => a + s.volume, 0);
       const action = c.status === "way" ? `<button class="btn sm" type="button" data-act="arrive" data-id="${c.id}">Прибыла</button>` : c.status === "arrived" ? `<button class="btn sm dark" type="button" data-act="issue" data-id="${c.id}">Выдать</button>` : `<span class="muted">${u.dShort(c.arrivedAt)}</span>`;
-      return `<tr class="click" data-act="openCons" data-id="${c.id}"><td><b>${E(c.id)}</b><div class="muted" style="font-size:12px">${E(c.transport)} · ${c.shipIds.length} ${u.plural(c.shipIds.length, "поставка", "поставки", "поставок")}</div></td><td><b>${E(c.clientId)}</b> ${E(cname(c.clientId))}</td><td class="r">${pl}</td><td class="r">${u.kg(w)}</td><td class="r">${u.vol(v)}</td><td class="r">${u.dShort(c.sentAt)}</td><td class="r">${c.status === "way" ? "≈" + u.NB + u.dShort(c.eta) : "—"}</td><td>${pill(c.status === "way" ? "way" : c.status)}</td><td class="r" data-stop="1">${action}</td></tr>`;
+      return `<tr class="click" data-act="openCons" data-id="${c.id}"><td><b>${E(c.id)}</b><div class="muted" style="font-size:12px">${E(c.transport)} · ${c.shipIds.length} ${u.plural(c.shipIds.length, "поставка", "поставки", "поставок")}</div></td><td><b>${E(c.clientId)}</b><div class="muted" style="font-size:12px">${E(cname(c.clientId))}</div></td><td>${u.places(pl)}<div class="muted" style="font-size:12px">${u.kg(w)} · ${u.vol(v)}</div></td><td>${u.dShort(c.sentAt)}<div class="muted" style="font-size:12px">${c.status === "way" ? "прибытие ≈" + u.NB + u.dShort(c.eta) : c.arrivedAt ? "прибыла " + u.dShort(c.arrivedAt) : ""}</div></td><td>${pill(c.status === "way" ? "way" : c.status)}</td><td class="r" data-stop="1">${action}</td></tr>`;
     }).join("");
   }
   function cons() {
     const S = st.S;
     const open = S.consignments.filter((c) => c.status !== "done").sort((a, b) => b.sentAt - a.sentAt);
     const done = S.consignments.filter((c) => c.status === "done").sort((a, b) => b.sentAt - a.sentAt);
-    const head = '<thead><tr><th>Трек-номер</th><th>Клиент</th><th class="r">Мест</th><th class="r">Вес</th><th class="r">Объём</th><th class="r">Отправлена</th><th class="r">Прибытие</th><th>Статус</th><th class="r"></th></tr></thead>';
+    const head = '<thead><tr><th>Трек-номер</th><th>Клиент</th><th>Груз</th><th>Отправлена</th><th>Статус</th><th class="r"></th></tr></thead>';
     return `<div class="pane">
       <div class="ph"><div><h1>Отправки</h1><div class="sub">Поставки, объединённые в одну отправку с трек-номером компании</div></div><span class="grow"></span>${optBtn("invoice", "Накладная")}</div>
-      <table class="tbl">${head}<tbody>${consRows(open) || '<tr><td colspan="9" class="muted">Нет активных отправок</td></tr>'}</tbody></table>
+      <table class="tbl">${head}<tbody>${consRows(open) || '<tr><td colspan="6" class="muted">Нет активных отправок</td></tr>'}</tbody></table>
       <h3 class="mt2" style="font-size:15px;margin-bottom:10px">Выданы</h3>
       <table class="tbl">${head}<tbody>${consRows(done)}</tbody></table>
     </div>`;
