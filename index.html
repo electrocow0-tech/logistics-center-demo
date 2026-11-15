@@ -4,61 +4,59 @@
 <style>html,body{background:#eef1f5;margin:0}.fl body{visibility:hidden}</style>
 <script>document.documentElement.classList.add("fl")</script>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#eef1f5">
 <title>Центр логистики · прототип</title>
 <link rel="preload" href="fonts/geologica-cyrillic-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/geologica-latin-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/fonts.css?v=cfda5a8beb">
-<link rel="stylesheet" href="css/app.css?v=cfda5a8beb">
+<link rel="stylesheet" href="css/fonts.css?v=7ddf26c4f3">
+<link rel="stylesheet" href="css/app.css?v=7ddf26c4f3">
 <script>/* страница показывается, когда шрифт загружен: без подмены шрифта и сдвигов */(function(d){var done=function(){window.__fr=1;if(window.__ar)d.classList.remove("fl")};if(document.fonts&&document.fonts.load){Promise.all(["400 14px Geologica","700 14px Geologica"].map(function(f){return document.fonts.load(f,"АБВабвABCabc0123")})).then(done,done)}else{done()}setTimeout(function(){d.classList.remove("fl")},1800)})(document.documentElement)</script>
 </head>
-<body>
+<body data-mode="desk" data-scn="off">
 <header class="topbar">
-  <div class="brand"><span class="mk" id="brandMark"></span>Центр логистики<small>прототип</small></div>
-  <div class="tb-roles"><span>Компьютер:</span><div class="seg two" id="deskRoles"><button type="button" data-act="deskRole" data-role="admin"><b>Администратор</b><small>Рамиль: видит всё, деньги, отчёты</small></button><button type="button" data-act="deskRole" data-role="manager"><b>Менеджер в России</b><small>клиенты, отправки, трек-номера</small></button></div></div>
+  <div class="brand"><span class="mk" id="brandMark"></span><span class="bn">Центр логистики</span><small>прототип</small></div>
+  <div class="seg mode" id="modeSeg" role="tablist" aria-label="Режим просмотра"></div>
+  <div class="seg light cnt" id="cntSeg" aria-label="Сколько телефонов показать"></div>
   <div class="tb-right">
     <button class="btn" type="button" data-act="scnOpen" id="btnScn"></button>
     <button class="btn ghost" type="button" data-act="reset" id="btnReset"></button>
   </div>
 </header>
+<div class="mstrip" id="mstrip">
+  <div class="ms-roles" id="msRoles"></div>
+  <div class="ms-scn" id="msScn"></div>
+  <button class="ms-menu" type="button" data-act="menu" id="msMenu" aria-label="Меню прототипа"></button>
+</div>
 
 <main class="stage">
   <section class="desk" aria-label="Экран компьютера">
-    <div class="chrome"><i></i><i></i><i></i><span class="url" id="deskUrl"></span><span class="who" id="deskWho"></span></div>
+    <div class="chrome"><i></i><i></i><i></i><div class="seg two" id="deskRoles"></div><span class="who" id="deskWho"></span></div>
     <div class="app">
       <aside class="side"><div class="view" id="side"></div></aside>
       <div class="main" id="deskScroll"><div class="view" id="deskView"></div></div>
       <div class="dim" id="deskDim" data-act="closeDesk"></div>
       <div class="drawer" id="drawer"></div>
       <div class="modal" id="modal"></div>
+      <div class="dpush" id="dpush" data-act="dpushOpen"></div>
     </div>
   </section>
-
-  <section class="pcol" aria-label="Экран телефона">
-    <div class="seg light two" id="phoneRoles"><button type="button" data-act="phoneRole" data-role="warehouse"><b>Склад</b><small>Китай, приёмка</small></button><button type="button" data-act="phoneRole" data-role="client"><b>Клиент<span class="dot" id="clientDot"></span></b><small>свои грузы</small></button><button type="button" data-act="phoneRole" data-role="admin"><b>Админ</b><small>Рамиль</small></button></div>
-    <div class="phone">
-      <div class="screen">
-        <div class="sbar"><span id="clock">9:41</span><span class="ind"><svg width="17" height="11" viewBox="0 0 17 11" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1" fill="#0f1b2d"/><rect x="4.6" y="5" width="3" height="6" rx="1" fill="#0f1b2d"/><rect x="9.2" y="2.6" width="3" height="8.4" rx="1" fill="#0f1b2d"/><rect x="13.8" y="0" width="3" height="11" rx="1" fill="#0f1b2d"/></svg><span class="bat"></span></span></div>
-        <div class="push" id="push" data-act="pushOpen"></div>
-        <div class="pview" id="phoneScroll"><div class="view" id="phoneView"></div></div>
-        <nav class="ptabs" id="ptabs"></nav>
-        <div class="pdim" id="pdim" data-act="closeSheet"></div>
-        <div class="psheet" id="psheet"></div>
-      </div>
-    </div>
-    <div class="pcap" id="pcap"></div>
+  <section class="phones" id="phones" data-n="2" aria-label="Экраны телефонов">
+    <div class="pslot" id="ps0" data-slot="0"></div>
+    <div class="pslot" id="ps1" data-slot="1"></div>
   </section>
 </main>
 <footer class="dock" aria-label="Сценарий"><div class="view dock-in" id="dock"></div></footer>
 <div class="ov" id="ov"><div class="card" id="ovCard"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/util.js?v=cfda5a8beb"></script>
-<script src="js/store.js?v=cfda5a8beb"></script>
-<script src="js/desk.js?v=cfda5a8beb"></script>
-<script src="js/phone.js?v=cfda5a8beb"></script>
-<script src="js/scenario.js?v=cfda5a8beb"></script>
-<script src="js/main.js?v=cfda5a8beb"></script>
+<script src="js/util.js?v=7ddf26c4f3"></script>
+<script src="js/i18n.js?v=7ddf26c4f3"></script>
+<script src="js/store.js?v=7ddf26c4f3"></script>
+<script src="js/desk.js?v=7ddf26c4f3"></script>
+<script src="js/phone.js?v=7ddf26c4f3"></script>
+<script src="js/scenario.js?v=7ddf26c4f3"></script>
+<script src="js/main.js?v=7ddf26c4f3"></script>
 </body>
 </html>

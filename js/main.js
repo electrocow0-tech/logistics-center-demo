@@ -1,38 +1,54 @@
-/* Оболочка: роли, навигация с плавной сменой экранов, окна, уведомления, запуск. */
+/* Оболочка: режимы «Компьютер» и «Телефон», роли, плавная смена экранов, окна, шторки, уведомления, запуск. */
 (function (App) {
   "use strict";
-  const u = App.u, st = App.store, $ = (id) => document.getElementById(id);
-  const UIKEY = "cl-ui-v1";
-  const DEF = { deskRole: "admin", desk: "board", deskP: null, phoneRole: "warehouse", phone: "home", phoneP: null, introSeen: false, scn: { on: false, step: 0, min: false } };
-  function loadUI() { try { const v = JSON.parse(localStorage.getItem(UIKEY) || "null"); if (v && v.desk) return v; } catch (e) { /* нет хранилища */ } return {}; }
-  const ui = (App.ui = Object.assign(JSON.parse(JSON.stringify(DEF)), loadUI()));
-  App.saveUI = () => { try { localStorage.setItem(UIKEY, JSON.stringify(ui)); } catch (e) { /* без сохранения */ } };
-  App.tmp = { sel: [], draft: null, pack: {}, q: "", period: "m", clientsQ: "" };
+  const u = App.u, st = App.store, $ = (id) => document.getElementById(id), I = u.icon, E = u.esc;
+  const mobile = window.matchMedia("(max-width: 699px)");
+  App.isMobile = () => mobile.matches;
 
-  // ===== каталог дополнительных модулей =====
-  App.OPT = {
-    chat: { icon: "chat", t: "Чат с автопереводом", d: "Сотрудники в России и Китае переписываются прямо в системе. Каждый пишет на своём языке, собеседник сразу читает перевод. Можно отправлять фото и привязывать сообщения к поставке, WeChat для работы больше не нужен.", chat: true },
-    invoice: { icon: "file", t: "Автоматическая накладная", d: "Накладная на отправку собирается в PDF по вашему шаблону из данных системы: клиент, места, вес, объём, стоимость. Одна кнопка вместо ручного заполнения." },
-    voice: { icon: "mic", t: "Создание поставки голосом", d: "Сотрудник наговаривает: «ТехноДом, восемь мест, девяносто шесть килограммов», и карточка заполняется сама. Удобно, когда руки заняты коробками." },
-    ocr: { icon: "scan", t: "Распознавание кода по фото", d: "Камера телефона читает код клиента прямо с коробки и сразу подставляет клиента. Код не нужно вводить вручную." },
-    tariff: { icon: "wallet", t: "Расчёт стоимости по тарифам", d: "Ставки по направлениям и видам доставки: за кубометр, за килограмм или по плотности. Стоимость считается сама при упаковке, с учётом упаковки и страховки." },
-    whatsapp: { icon: "send", t: "Уведомления клиентам в WhatsApp", d: "Клиенты получают статусы грузов в WhatsApp. Подключается через официального провайдера, у провайдера своя абонентская плата." },
-    analytics: { icon: "chart", t: "Расширенная аналитика", d: "Загрузка склада, сроки на каждом этапе, доходность по клиентам и направлениям, прогноз объёмов на следующий месяц." },
-    import: { icon: "download", t: "Перенос истории из Excel", d: "Переносим ваши текущие таблицы: клиентов и их коды, историю поставок и оплаты. Работа не останавливается ни на день." },
-    clientChat: { icon: "chat", t: "Чат с менеджером для клиентов", d: "Клиент пишет менеджеру прямо в приложении, а не в WhatsApp. Переписка привязана к его грузам, менеджер отвечает с компьютера, история не теряется при смене менеджера.", client: true },
-    sbp: { icon: "wallet", t: "Онлайн-оплата по СБП", d: "Клиент оплачивает доставку в приложении по QR-коду СБП. Оплата отмечается в системе сама, долг обнуляется без участия бухгалтера." },
-    calc: { icon: "layers", t: "Калькулятор доставки для клиента", d: "Клиент заранее считает стоимость по весу и объёму, выбирает авто или ЖД и видит срок. Меньше вопросов менеджеру, больше заявок." },
-    tgbot: { icon: "tg", t: "Бот «Где мой груз?» в Telegram", d: "Клиент пишет боту свой код или трек-номер и сразу получает статус, фото и дату прибытия. Отвечает круглосуточно, без менеджера." },
+  const PROLES = [["warehouse", "Склад в Китае"], ["cnmanager", "Менеджер Китая"], ["moscow", "Москва (выдача)"], ["client", "Клиент"], ["admin", "Администратор"]];
+  const PHOME = { warehouse: "home", cnmanager: "csum", moscow: "mlist", client: "ships", admin: "asum" };
+  const DROLES = {
+    admin: { who: "Рамиль · администратор", ava: "РМ", name: "Рамиль", role: "Администратор", home: "board", t: "Администратор", s: "Рамиль: видит всё" },
+    manager: { who: "Ольга · менеджер в России", ava: "ОК", name: "Ольга Королёва", role: "Менеджер в России", home: "dispatch", t: "Менеджер в России", s: "отправки, трек-номера" },
+    sales: { who: "Тимур · менеджер по продажам", ava: "ТА", name: "Тимур Ахметов", role: "Менеджер по продажам", home: "clients", t: "Менеджер по продажам", s: "только свои клиенты" },
+    accountant: { who: "Наталья · бухгалтер", ava: "НС", name: "Наталья Сергеева", role: "Бухгалтер", home: "money", t: "Бухгалтер", s: "деньги и учёт", stage: 2 },
   };
-  function optHtml(k) {
+  App.DROLES = DROLES; App.PROLES = PROLES; App.PHOME = PHOME;
+
+  const DEF = () => ({ mode: mobile.matches ? "phone" : "desk", deskRole: "admin", desk: "board", deskP: null, phones: 2,
+    slots: [{ role: "warehouse", screen: "home", p: null, lang: "ru", wh: "yiwu" }, { role: "client", screen: "ships", p: null, lang: "ru", wh: "yiwu" }],
+    introSeen: false, scn: { on: false, step: 0 } });
+  function loadUI() {
+    try { const v = JSON.parse(localStorage.getItem(st.UIKEY) || "null"); if (v && v.desk && Array.isArray(v.slots) && v.slots.length === 2 && DROLES[v.deskRole]) return v; } catch (e) { /* нет хранилища */ }
+    return {};
+  }
+  const ui = (App.ui = Object.assign(DEF(), loadUI()));
+  App.saveUI = () => { try { localStorage.setItem(st.UIKEY, JSON.stringify(ui)); } catch (e) { /* без сохранения */ } };
+  const TMP = () => ({ sel: {}, acc: null, pack: {}, packSel: [], aw: null, q: "", clientsQ: "", whF: "all", tr: "auto", period: 90, chat: null, chatText: "", ptext: {}, issue: null, pay: null });
+  App.tmp = TMP();
+  App.cur = 0; // телефон, в котором произошло действие
+  App.nPhones = () => (mobile.matches ? 1 : ui.phones);
+  // в каком телефоне сценарий показывает роль: слева сотрудник, справа клиент
+  App.slotFor = (role) => (App.nPhones() === 1 ? 0 : role === "client" ? 1 : 0);
+
+  // ===== шесть дополнительных опций из предложения =====
+  App.OPT = {
+    invoice: { icon: "file", t: "Автоматическая накладная", s: "Накладная на отправку собирается в PDF по вашему шаблону", d: "Накладная на отправку собирается в PDF по вашему шаблону из данных системы: клиент, места, вес, объём, трек-номер. Одна кнопка вместо ручного заполнения." },
+    voice: { icon: "mic", t: "Создание поставки голосом", s: "Сотрудник наговаривает данные, карточка заполняется сама", d: "Сотрудник склада наговаривает: «ТехноДом, восемь мест, поставщик Хунда», и карточка приёмки заполняется сама. Удобно, когда руки заняты коробками." },
+    analytics: { icon: "chart", t: "Расширенная аналитика", s: "Загрузка складов, сроки по этапам, доходность по клиентам", d: "Загрузка каждого склада, сроки на каждом этапе, доходность по клиентам. Видно, где груз задерживается и какие клиенты приносят больше всего." },
+    wecom: { icon: "bell", t: "Уведомления складу в WeCom", s: "Сотрудники в Китае получают задачи в привычном мессенджере", d: "Сотрудники в Китае получают задачи и уведомления в рабочем мессенджере WeCom: ожидается груз, пора упаковать, машина на погрузке. Надёжнее, чем уведомления браузера на китайских телефонах." },
+    clientChat: { icon: "chat", t: "Чат клиента с менеджером", s: "Клиент пишет в приложении, переписка привязана к его грузам", d: "Клиент пишет менеджеру прямо в приложении. Переписка привязана к его грузам, менеджер отвечает с компьютера, история не теряется при смене менеджера.", chat: true },
+    tgbot: { icon: "tg", t: "Бот «Где мой груз?» в Telegram", s: "Клиент получает статус по коду или трек-номеру круглосуточно", d: "Клиент пишет боту свой код или трек-номер и сразу получает статус, фото и дату прибытия. Отвечает круглосуточно, без участия менеджера." },
+  };
+  function optHtml(k, close) {
     const o = App.OPT[k]; if (!o) return "";
-    const chat = o.client ? `<div class="chat-prev"><div class="bub me">Добрый день! Когда будет П-0352?<small>ТехноДом · клиент</small></div><div class="bub">Отправили вчера, трек ЦЛ-48231, прибытие около 24 ноября<small>Ольга · менеджер</small></div></div>` : o.chat ? `<div class="chat-prev"><div class="bub">Груз MSK-117 упакован, 8 мест, можно отправлять?<small>Ли Вэй · переведено с китайского</small></div><div class="bub me">Да, отправляем сегодня авто<small>Ольга · собеседник читает по-китайски</small></div></div>` : "";
-    return `<div class="mh"><div class="mi">${u.icon(o.icon)}</div><div><h2>${u.esc(o.t)}</h2><span class="opt" style="margin-top:6px">${u.icon("spark")}Дополнительная опция</span></div><button class="x" type="button" data-act="closeAny" aria-label="Закрыть">${u.icon("x")}</button></div><p>${u.esc(o.d)}</p>${chat}<div class="note">Не входит в первую версию. Добавляется по вашему выбору сразу или следующим этапом, стоимость указана в предложении.</div>`;
+    const chat = o.chat ? `<div class="chat-prev"><div class="bub me">Добрый день! Когда приедут светильники?<small>ТехноДом · клиент</small></div><div class="bub">Отправили вчера, трек ЦЛ-48231, прибытие около 1 декабря<small>Ольга · менеджер</small></div></div>` : "";
+    return `<div class="mh"><div class="mi">${I(o.icon)}</div><div><h2>${E(o.t)}</h2><span class="opt" style="margin-top:6px">${I("spark")}<span class="ol">Дополнительная опция</span></span></div><button class="x" type="button" data-act="${close}" aria-label="Закрыть">${I("x")}</button></div><p>${E(o.d)}</p>${chat}<div class="note">Не входит в этапы. Можно добавить в любой этап или позже, по вашему желанию.</div>`;
   }
 
   // ===== плавная смена содержимого =====
   const T = new Map();
-  let navAt = { desk: 0, phone: 0 };
+  const navAt = { desk: 0, 0: 0, 1: 0 };
   function swap(view, html, scroller, after) {
     clearTimeout(T.get(view));
     view.classList.add("out");
@@ -45,45 +61,74 @@
       view.classList.remove("pre");
     }, 130));
   }
-  function put(view, html, after) { view.innerHTML = html; if (after) after(); }
-
-  const ROLE = { admin: { who: "Рамиль · администратор", ava: "РМ", name: "Рамиль", role: "Администратор" }, manager: { who: "Ольга · менеджер в России", ava: "ОК", name: "Ольга Королёва", role: "Менеджер в России" } };
-
-  function setOn(sel, val) { document.querySelectorAll(sel).forEach((b) => b.classList.toggle("on", b.dataset.role === val)); }
-  function chrome() {
-    $("deskUrl").innerHTML = u.icon("pin") + "центр-логистики" + u.NB + "·" + u.NB + u.esc(App.D.title(ui.desk));
-    $("deskWho").textContent = ROLE[ui.deskRole].who;
-    setOn("#deskRoles button", ui.deskRole); setOn("#phoneRoles button", ui.phoneRole);
-    const unread = st.S.notes.some((n) => n.clientId === st.ME && !n.read);
-    $("clientDot").classList.toggle("show", unread && ui.phoneRole !== "client");
-    $("pcap").textContent = { client: "Телефон клиента: приложение открывается по ссылке, как у банков", admin: "Телефон администратора. Менеджер в России тоже работает с телефона", warehouse: "Телефон сотрудника склада в Иу" }[ui.phoneRole] || "";
-  }
+  function put(view, html, after) { clearTimeout(T.get(view)); view.classList.remove("out"); view.innerHTML = html; if (after) after(); }
   function decorate() { if (App.scenario) App.scenario.decorate(); }
 
-  function renderSide(anim) { const h = App.D.side(ui.deskRole, ui.desk, ROLE[ui.deskRole]); anim ? swap($("side"), h, null) : put($("side"), h); }
+  const slotEl = (i) => $("ps" + i);
+  const sq = (i, sel) => slotEl(i).querySelector(sel);
+  App.slotEl = slotEl; App.sq = sq;
+  const clientSlot = () => (ui.mode !== "phone" ? -1 : ui.slots.slice(0, App.nPhones()).findIndex((s) => s.role === "client"));
+  const hasUnread = () => st.S.notes.some((n) => n.clientId === st.ME && !n.read);
+
+  let msKey = "";
+  function chrome() {
+    const b = document.body;
+    b.dataset.mode = ui.mode; b.dataset.scn = ui.scn.on ? "on" : "off";
+    $("phones").dataset.n = ui.phones;
+    document.querySelectorAll("#modeSeg button").forEach((x) => x.classList.toggle("on", x.dataset.mode === ui.mode));
+    document.querySelectorAll("#cntSeg button").forEach((x) => x.classList.toggle("on", +x.dataset.n === ui.phones));
+    document.querySelectorAll("#deskRoles button").forEach((x) => x.classList.toggle("on", x.dataset.role === ui.deskRole));
+    $("deskWho").textContent = DROLES[ui.deskRole].who;
+    const dot = hasUnread();
+    ui.slots.forEach((s, i) => {
+      slotEl(i).dataset.role = s.role;
+      slotEl(i).querySelectorAll(".prole button").forEach((x) => x.classList.toggle("on", x.dataset.role === s.role));
+      sq(i, ".prole .dot").classList.toggle("show", dot && s.role !== "client");
+    });
+    // полоса ролей на настоящем телефоне
+    const key = ui.mode, ms = $("msRoles");
+    if (key !== msKey) {
+      msKey = key;
+      ms.innerHTML = ui.mode === "phone"
+        ? PROLES.map(([k, t]) => `<button type="button" data-act="phoneRole" data-slot="0" data-role="${k}">${t}</button>`).join("")
+        : Object.keys(DROLES).map((k) => `<button type="button" data-act="deskRole" data-role="${k}">${DROLES[k].t}${DROLES[k].stage ? '<em class="stg s2">Этап 2</em>' : ""}</button>`).join("");
+    }
+    const curRole = ui.mode === "phone" ? ui.slots[0].role : ui.deskRole;
+    ms.querySelectorAll("button").forEach((x) => { const on = x.dataset.role === curRole; x.classList.toggle("on", on); });
+  }
+  App.chrome = chrome;
+  function msReveal() { const on = $("msRoles").querySelector(".on"); if (on) $("msRoles").scrollLeft = Math.max(0, on.offsetLeft - 60); }
+
+  function renderSide(anim) { const h = App.D.side(ui.deskRole, ui.desk, DROLES[ui.deskRole]); anim ? swap($("side"), h, null) : put($("side"), h); }
   function renderDesk(anim) {
-    if (!App.D.screens[ui.desk]) { ui.desk = ui.deskRole === "manager" ? "dispatch" : "board"; ui.deskP = null; }
-    let h; try { h = App.D.screens[ui.desk](ui.deskP); } catch (e) { console.error(e); ui.desk = "board"; ui.deskP = null; h = App.D.screens.board(); }
-    anim ? swap($("deskView"), h, $("deskScroll"), decorate) : put($("deskView"), h, decorate);
+    if (!App.D.allowed(ui.deskRole, ui.desk)) { ui.desk = DROLES[ui.deskRole].home; ui.deskP = null; }
+    let h; try { h = App.D.screens[ui.desk](ui.deskP); } catch (e) { console.error(e); ui.desk = DROLES[ui.deskRole].home; ui.deskP = null; h = App.D.screens[ui.desk](); }
+    anim ? swap($("deskView"), h, $("deskScroll"), () => { App.D.after(); decorate(); }) : put($("deskView"), h, () => { App.D.after(); decorate(); });
     chrome();
   }
-  function renderPhone(anim) {
-    const homeOf = { client: "ships", admin: "asum", warehouse: "home" };
-    if (!App.P.screens[ui.phone]) { ui.phone = homeOf[ui.phoneRole] || "home"; ui.phoneP = null; }
-    let h; try { h = App.P.screens[ui.phone](ui.phoneP); } catch (e) { console.error(e); ui.phone = homeOf[ui.phoneRole] || "home"; ui.phoneP = null; h = App.P.screens[ui.phone](); }
-    $("ptabs").innerHTML = App.P.tabs(ui.phoneRole, ui.phone);
-    anim ? swap($("phoneView"), h, $("phoneScroll"), decorate) : put($("phoneView"), h, decorate);
-    if (ui.phoneRole === "client") st.readNotes();
-    chrome();
+  function renderSlot(i, anim) {
+    const s = ui.slots[i];
+    if (!App.P.has(s.role, s.screen)) { s.screen = PHOME[s.role]; s.p = null; }
+    let h; try { h = App.P.render(i); } catch (e) { console.error(e); s.screen = PHOME[s.role]; s.p = null; h = App.P.render(i); }
+    sq(i, ".ptabs").innerHTML = App.P.tabs(i);
+    const after = () => { App.P.after(i); decorate(); };
+    anim ? swap(sq(i, ".pv"), h, sq(i, ".pview"), after) : put(sq(i, ".pv"), h, after);
+    if (s.role === "client" && clientSlot() === i) st.readNotes();
   }
+  App.renderSlot = renderSlot;
   App.refresh = function (force) {
     const now = Date.now();
-    if (force || now - navAt.desk > 320) { const sc = $("deskScroll").scrollTop; renderDesk(false); $("deskScroll").scrollTop = sc; }
-    if (force || now - navAt.phone > 320) {
-      const a = document.activeElement;
-      const typing = a && a.closest && a.closest("#phoneView") && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
-      if (!typing) { const sc = $("phoneScroll").scrollTop; renderPhone(false); $("phoneScroll").scrollTop = sc; }
+    if (force || now - navAt.desk > 320) {
+      const sc = $("deskScroll").scrollTop, a = document.activeElement, keep = a && a.dataset && a.dataset.in && a.closest("#deskView") ? { k: a.dataset.in, s: a.selectionStart } : null;
+      renderDesk(false); $("deskScroll").scrollTop = sc;
+      if (keep) { const n = $("deskView").querySelector(`[data-in="${keep.k}"]`); if (n) { n.focus({ preventScroll: true }); try { n.setSelectionRange(keep.s, keep.s); } catch (e) { /* не текстовое поле */ } } }
     }
+    ui.slots.forEach((s, i) => {
+      if (!force && now - navAt[i] <= 320) return;
+      const a = document.activeElement, typing = a && a.closest && a.closest("#ps" + i + " .pv") && (a.tagName === "INPUT" || a.tagName === "TEXTAREA");
+      if (typing && !force) { sq(i, ".ptabs").innerHTML = App.P.tabs(i); return; }
+      const sc = sq(i, ".pview").scrollTop; renderSlot(i, false); sq(i, ".pview").scrollTop = sc;
+    });
     renderSide(false); chrome();
   };
 
@@ -94,111 +139,170 @@
       if (roleChanged) ui.deskRole = role;
       ui.desk = screen; ui.deskP = p == null ? null : p; navAt.desk = Date.now(); App.saveUI();
       renderDesk(true); renderSide(!!roleChanged);
+      if (roleChanged) msReveal();
       if (App.scenario) App.scenario.onNav();
     },
-    phone(screen, p, role) {
-      closeSheet();
-      const wasClient = ui.phoneRole === "client";
-      if (role) ui.phoneRole = role;
-      ui.phone = screen; ui.phoneP = p == null ? null : p; navAt.phone = Date.now(); App.saveUI();
+    phone(i, screen, p, role) {
+      closeSheet(i);
+      const s = ui.slots[i], was = clientSlot() === i;
+      if (role && role !== s.role) { s.role = role; hidePush(i); }
+      s.screen = screen; s.p = p == null ? null : p; navAt[i] = Date.now(); App.saveUI();
       const unread = st.S.notes.filter((n) => n.clientId === st.ME && !n.read);
-      renderPhone(true);
-      if (ui.phoneRole === "client" && !wasClient && unread.length) setTimeout(() => showPush(unread[0]), 420);
+      renderSlot(i, true); chrome();
+      if (clientSlot() === i && !was && unread.length) setTimeout(() => notePush(i, unread[0]), 420);
+      if (role) msReveal();
       if (App.scenario) App.scenario.onNav();
     },
   };
+  App.setMode = function (m) {
+    if (m === ui.mode) return;
+    closeDesk(); closeSheet();
+    const unread = st.S.notes.filter((n) => n.clientId === st.ME && !n.read);
+    ui.mode = m; App.saveUI(); chrome(); msReveal();
+    const ci = clientSlot();
+    if (ci >= 0 && unread.length) { st.readNotes(); setTimeout(() => notePush(ci, unread[0]), 520); }
+    if (App.scenario) App.scenario.onNav();
+  };
+  App.setPhones = function (n) { ui.phones = n === 1 ? 1 : 2; App.saveUI(); chrome(); if (App.scenario) App.scenario.onNav(); };
 
-  // ===== окна =====
-  function openDesk(kind, html) {
+  // ===== окна компьютера, шторки телефона =====
+  function openDesk(kind, html, wide) {
     const el = $(kind), other = kind === "drawer" ? $("modal") : $("drawer");
-    other.classList.remove("show"); el.innerHTML = html; el.scrollTop = 0;
+    other.classList.remove("show"); el.innerHTML = html; el.scrollTop = 0; el.classList.toggle("wide", !!wide);
     requestAnimationFrame(() => { el.classList.add("show"); $("deskDim").classList.add("show"); decorate(); });
   }
   function closeDesk() { $("drawer").classList.remove("show"); $("modal").classList.remove("show"); $("deskDim").classList.remove("show"); }
   App.drawer = (h) => openDesk("drawer", h);
-  App.modal = (h) => openDesk("modal", h);
+  App.modal = (h, wide) => openDesk("modal", h, wide);
+  App.modalOpen = () => $("modal").classList.contains("show");
   App.closeDesk = closeDesk;
-  App.sheet = (h) => { const s = $("psheet"); s.innerHTML = '<div class="grab"></div>' + h; s.scrollTop = 0; requestAnimationFrame(() => { s.classList.add("show"); $("pdim").classList.add("show"); decorate(); }); };
-  function closeSheet() { $("psheet").classList.remove("show"); $("pdim").classList.remove("show"); }
+  App.sheet = (i, h) => { const s = sq(i, ".psheet"); s.innerHTML = '<div class="grab"></div>' + h; s.scrollTop = 0; requestAnimationFrame(() => { s.classList.add("show"); sq(i, ".pdim").classList.add("show"); decorate(); }); };
+  App.sheetOpen = (i) => sq(i, ".psheet").classList.contains("show");
+  function closeSheet(i) { (i == null ? [0, 1] : [i]).forEach((k) => { sq(k, ".psheet").classList.remove("show"); sq(k, ".pdim").classList.remove("show"); }); }
   App.closeSheet = closeSheet;
   App.overlay = (h) => { $("ovCard").innerHTML = h; $("ov").classList.add("show"); };
   App.closeOverlay = () => $("ov").classList.remove("show");
   let toastT = 0;
-  App.toast = (text, ic) => { const t = $("toast"); t.innerHTML = u.icon(ic || "check") + "<span>" + u.esc(text) + "</span>"; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3200); };
-  App.opt = (k, inPhone) => (inPhone ? App.sheet(optHtml(k).replace('data-act="closeAny"', 'data-act="closeSheet"')) : App.modal(optHtml(k)));
+  App.toast = (text, ic) => { const t = $("toast"); t.innerHTML = I(ic || "check") + "<span>" + E(text) + "</span>"; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3400); };
+  App.opt = (k, slot) => (slot == null ? App.modal(optHtml(k, "closeDesk")) : App.sheet(slot, optHtml(k, "closeSheet")));
 
-  // ===== уведомление на телефоне клиента =====
-  let pushT = 0, pushShip = null;
-  function showPush(n) {
-    const p = $("push");
-    const m = /П-\d+/.exec(n.text); pushShip = m ? m[0] : null;
-    p.innerHTML = `<span class="mk">${u.icon("box")}</span><div><b>Центр логистики</b><p>${u.esc(n.text)}</p></div><small>сейчас</small>`;
+  // ===== уведомления: на экране телефона и в окне компьютера =====
+  const pushT = {}, pushGo = {};
+  function showPush(i, title, text, go) {
+    const p = sq(i, ".push"); pushGo[i] = go || null;
+    p.innerHTML = `<span class="mk">${I("box")}</span><div><b>${E(title)}</b><p>${E(text)}</p></div><small>${ui.slots[i].lang === "zh" && go && go[0] === "chat" ? "刚刚" : "сейчас"}</small>`;
     p.classList.remove("show"); void p.offsetWidth; p.classList.add("show");
-    clearTimeout(pushT); pushT = setTimeout(() => p.classList.remove("show"), 6000);
+    clearTimeout(pushT[i]); pushT[i] = setTimeout(() => p.classList.remove("show"), 6500);
   }
+  function hidePush(i) { clearTimeout(pushT[i]); sq(i, ".push").classList.remove("show"); }
+  function notePush(i, n) { showPush(i, "Центр логистики", n.text, n.ref ? ["citem", n.ref.t + ":" + n.ref.id] : ["ships", null]); }
+  App.showPush = showPush;
   st.on("push", (n) => {
-    if (ui.phoneRole === "client") { showPush(n); n.read = true; st.save(); }
+    const i = clientSlot();
+    if (i >= 0) { notePush(i, n); n.read = true; st.save(); }
     chrome();
   });
+  let dpT = 0, dpGo = null;
+  App.dpush = (title, text, go) => {
+    const p = $("dpush"); dpGo = go;
+    p.innerHTML = `<span class="mk">${I("chat")}</span><div><b>${E(title)}</b><p>${E(text)}</p></div>`;
+    p.classList.remove("show"); void p.offsetWidth; p.classList.add("show");
+    clearTimeout(dpT); dpT = setTimeout(() => p.classList.remove("show"), 7000);
+  };
 
   // ===== обработчики =====
   const acts = (App.acts = Object.assign(App.acts || {}, {
-    deskRole: (d) => { if (d.role !== ui.deskRole) App.go.desk(d.role === "manager" ? "dispatch" : "board", null, d.role); },
-    phoneRole: (d) => { if (d.role !== ui.phoneRole) App.go.phone({ client: "ships", admin: "asum", warehouse: "home" }[d.role], null, d.role); },
+    mode: (d) => App.setMode(d.mode),
+    phones: (d) => App.setPhones(+d.n),
+    deskRole: (d) => { App.closeOverlay(); if (d.role !== ui.deskRole) App.go.desk(DROLES[d.role].home, null, d.role); },
+    phoneRole: (d) => { const i = App.cur; if (d.role !== ui.slots[i].role) App.go.phone(i, PHOME[d.role], null, d.role); },
     d: (d) => App.go.desk(d.s, d.p || null, d.role || null),
-    p: (d) => App.go.phone(d.s, d.p || null, d.role || null),
+    p: (d) => App.go.phone(App.cur, d.s, d.p || null, null),
+    lang: (d) => { const s = ui.slots[App.cur]; if (s.lang === d.l) return; s.lang = d.l; App.saveUI(); closeSheet(App.cur); renderSlot(App.cur, true); if (App.scenario) App.scenario.check("lang", d.l); },
     closeDesk: () => closeDesk(),
-    closeSheet: () => closeSheet(),
+    closeSheet: () => closeSheet(App.cur),
     closeAny: () => { closeDesk(); closeSheet(); App.closeOverlay(); },
-    opt: (d, el) => App.opt(d.k, !!el.closest(".screen")),
+    opt: (d, el) => App.opt(d.k, el && el.closest(".pslot") ? App.cur : null),
     toast: (d) => App.toast(d.t, d.i),
-    pushOpen: () => { $("push").classList.remove("show"); if (ui.phoneRole === "client") App.go.phone(pushShip ? "ship" : "ships", pushShip); },
-    reset: () => App.overlay(`<span class="opt">${u.icon("refresh")}Сброс</span><h2>Начать демо заново?</h2><p>Все изменения, которые вы сделали в прототипе, пропадут, данные вернутся к исходным.</p><div class="of"><button class="btn pri lg" type="button" data-act="resetYes">Сбросить</button><button class="btn lg" type="button" data-act="closeAny">Отмена</button></div>`),
+    pushOpen: () => { const i = App.cur, go = pushGo[i]; hidePush(i); if (go) App.go.phone(i, go[0], go[1]); },
+    dpushOpen: () => { $("dpush").classList.remove("show"); if (dpGo) App.go.desk(dpGo[0], dpGo[1]); },
+    menu: () => App.overlay(`<h2 style="margin-top:0">Меню прототипа</h2>
+      <div class="menu-list">
+        <button type="button" data-act="scnStart">${I("play")}<span><b>Пройти сценарий</b><small>путь груза от трек-номера до выдачи, 3 минуты</small></span></button>
+        <button type="button" data-act="menuMode">${I(ui.mode === "phone" ? "monitor" : "phone")}<span><b>Режим «${ui.mode === "phone" ? "Компьютер" : "Телефон"}»</b><small>${ui.mode === "phone" ? "экраны администратора, менеджеров и бухгалтера" : "склад, менеджер Китая, Москва, клиент"}</small></span></button>
+        <button type="button" data-act="menuInc">${I("grid")}<span><b>Что входит</b><small>три этапа и шесть опций</small></span></button>
+        <button type="button" data-act="reset">${I("refresh")}<span><b>Сбросить демо</b><small>вернуть исходные данные</small></span></button>
+      </div><div class="of"><button class="btn lg block" type="button" data-act="closeAny">Закрыть</button></div>`),
+    menuMode: () => { App.closeOverlay(); App.setMode(ui.mode === "phone" ? "desk" : "phone"); },
+    menuInc: () => { App.closeOverlay(); App.setMode("desk"); App.go.desk("included"); },
+    reset: () => App.overlay(`<span class="opt">${I("refresh")}<span class="ol">Сброс</span></span><h2>Начать демо заново?</h2><p>Все изменения, которые вы сделали в прототипе, пропадут, данные вернутся к исходным.</p><div class="of"><button class="btn pri lg" type="button" data-act="resetYes">Сбросить</button><button class="btn lg" type="button" data-act="closeAny">Отмена</button></div>`),
     resetYes: () => {
-      App.closeOverlay(); closeDesk(); closeSheet();
-      st.reset(); Object.assign(ui, JSON.parse(JSON.stringify(DEF)), { introSeen: true }); App.tmp.sel = []; App.tmp.draft = null; App.tmp.pack = {};
-      App.saveUI(); renderSide(true); renderDesk(true); renderPhone(true); chrome();
+      App.closeOverlay(); closeDesk(); closeSheet(); hidePush(0); hidePush(1);
+      const keep = ui.mode;
+      st.reset(); Object.assign(ui, DEF(), { introSeen: true, mode: keep }); App.tmp = TMP();
+      App.saveUI(); renderSide(true); renderDesk(true); renderSlot(0, true); renderSlot(1, true); chrome();
       if (App.scenario) App.scenario.render();
       App.toast("Демо сброшено, данные вернулись к исходным", "refresh");
     },
+    introClose: () => { ui.introSeen = true; App.saveUI(); App.closeOverlay(); },
   }));
+  function setCur(el) { const ps = el.closest("[data-slot]"); if (ps) App.cur = +ps.dataset.slot || 0; }
   document.addEventListener("click", (e) => {
     const el = e.target.closest("[data-act]"); if (!el) return;
     const fn = acts[el.dataset.act]; if (!fn) return;
-    e.preventDefault(); fn(el.dataset, el, e);
+    e.preventDefault(); setCur(el); fn(el.dataset, el, e);
   });
   document.addEventListener("input", (e) => {
     const el = e.target.closest("[data-in]"); if (!el) return;
-    const fn = App.ins && App.ins[el.dataset.in]; if (fn) fn(el.value, el, e);
+    const fn = App.ins && App.ins[el.dataset.in]; if (fn) { setCur(el); fn(el.value, el, e); }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { closeDesk(); closeSheet(); App.closeOverlay(); }
-    if (e.key === "Enter") { const el = e.target.closest && e.target.closest("[data-enter]"); if (el) { const b = document.querySelector(el.dataset.enter); if (b && !b.disabled) b.click(); } }
+    if (e.key === "Enter") { const el = e.target.closest && e.target.closest("[data-enter]"); if (el) { const root = el.closest(".pslot") || document, b = root.querySelector(el.dataset.enter); if (b && !b.disabled) { e.preventDefault(); b.click(); } } }
   });
+
+  // окна и шторки уезжают за край контейнера: сам контейнер прокручиваться не должен (фокус в поле, клавиатура телефона)
+  document.addEventListener("scroll", (e) => { const t = e.target; if (t && t.classList && (t.classList.contains("screen") || t.classList.contains("desk") || t.classList.contains("app") || t.classList.contains("stage")) && (t.scrollTop || t.scrollLeft)) { t.scrollTop = 0; t.scrollLeft = 0; } }, true);
 
   // изменения данных → мягкая перерисовка
   let refT = 0;
   st.on("change", () => { clearTimeout(refT); refT = setTimeout(() => App.refresh(), 0); });
+  mobile.addEventListener("change", () => { chrome(); App.refresh(true); if (App.scenario) App.scenario.render(); });
 
   // часы в строке состояния
-  function clock() { const d = new Date(); $("clock").textContent = d.getHours() + ":" + u.pad(d.getMinutes()); }
-  clock(); setInterval(clock, 20000);
+  function clock() { const d = new Date(), t = d.getHours() + ":" + u.pad(d.getMinutes()); document.querySelectorAll(".clock").forEach((c) => { c.textContent = t; }); }
 
   // ===== запуск =====
-  $("brandMark").innerHTML = u.icon("box");
-  $("btnScn").innerHTML = u.icon("play") + "Сценарий";
-  $("btnReset").innerHTML = u.icon("refresh") + "Сбросить демо";
-  renderSide(false); renderDesk(false); renderPhone(false); chrome();
+  const SIG = '<svg width="17" height="11" viewBox="0 0 17 11" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1" fill="#0f1b2d"/><rect x="4.6" y="5" width="3" height="6" rx="1" fill="#0f1b2d"/><rect x="9.2" y="2.6" width="3" height="8.4" rx="1" fill="#0f1b2d"/><rect x="13.8" y="0" width="3" height="11" rx="1" fill="#0f1b2d"/></svg>';
+  [0, 1].forEach((i) => {
+    slotEl(i).innerHTML = `<div class="seg light prole">${PROLES.map(([k, t]) => `<button type="button" data-act="phoneRole" data-role="${k}">${t}${k === "client" ? '<span class="dot"></span>' : ""}</button>`).join("")}</div>
+      <div class="phone"><div class="screen">
+        <div class="sbar"><span class="clock">9:41</span><span class="ind">${SIG}<span class="bat"></span></span></div>
+        <div class="push" data-act="pushOpen"></div>
+        <div class="pview"><div class="view pv"></div></div>
+        <nav class="ptabs"></nav>
+        <div class="pdim" data-act="closeSheet"></div>
+        <div class="psheet"></div>
+      </div></div>`;
+  });
+  $("brandMark").innerHTML = I("box");
+  $("modeSeg").innerHTML = `<button type="button" data-act="mode" data-mode="desk">${I("monitor")}Компьютер</button><button type="button" data-act="mode" data-mode="phone">${I("phone")}Телефон</button>`;
+  $("cntSeg").innerHTML = `<button type="button" data-act="phones" data-n="1">Один</button><button type="button" data-act="phones" data-n="2">Два</button>`;
+  $("deskRoles").innerHTML = Object.keys(DROLES).map((k) => `<button type="button" data-act="deskRole" data-role="${k}"><b>${DROLES[k].t}${DROLES[k].stage ? '<em class="stg s2">Этап 2</em>' : ""}</b><small>${DROLES[k].s}</small></button>`).join("");
+  $("btnScn").innerHTML = I("play") + "<span>Сценарий</span>";
+  $("btnReset").innerHTML = I("refresh") + "<span>Сбросить демо</span>";
+  $("msMenu").innerHTML = I("menu");
+  clock(); setInterval(clock, 20000);
+  renderSide(false); renderDesk(false); renderSlot(0, false); renderSlot(1, false); chrome(); msReveal();
   if (App.scenario) App.scenario.init();
   if (!ui.introSeen) {
-    setTimeout(() => App.overlay(`<span class="opt">${u.icon("spark")}Прототип</span>
+    setTimeout(() => App.overlay(`<span class="opt">${I("spark")}<span class="ol">Прототип</span></span>
       <h2>Центр логистики: как это будет работать</h2>
-      <p>Это кликабельный прототип вашей системы. Слева компьютер администратора или менеджера в России, справа телефон склада в Китае или клиента. Всё, что вы нажимаете, сразу видно у других ролей.</p>
-      <ul><li>Склад принимает груз с фото, клиенту сразу приходит уведомление</li><li>Грузы движутся по этапам на общей доске</li><li>Менеджер собирает отправку и присваивает трек-номер</li><li>Деньги, долги и отчёты в одном месте</li></ul>
-      <p class="muted">Данные вымышленные. Можно смело нажимать всё подряд: кнопка «Сбросить демо» вернёт всё как было.</p>
-      <div class="of"><button class="btn pri lg" type="button" data-act="scnStart">${u.icon("play")}Пройти сценарий, 2 минуты</button><button class="btn lg" type="button" data-act="introClose">Осмотреться самостоятельно</button></div>`), 350);
+      <p>${mobile.matches ? "Это кликабельный прототип вашей системы. Вверху выбор роли: склад в Китае, менеджер Китая, сотрудник в Москве, клиент, администратор. Экраны компьютера открываются через меню справа вверху." : "Это кликабельный прототип вашей системы. Вверху переключатель «Компьютер / Телефон»: на компьютере работают администратор и менеджеры, на телефоне склад в Китае, менеджер Китая, сотрудник в Москве и клиент. Всё, что делает одна роль, сразу видно у остальных."}</p>
+      <ul><li>Клиент заранее вносит трек-номер, склад находит его груз по треку</li><li>Приходы от разных поставщиков собираются в один груз и уезжают частями</li><li>Склад работает на китайском, вы на русском</li><li>Этапы 2 и 3 из предложения тоже можно посмотреть, они помечены</li></ul>
+      <p class="muted">Данные вымышленные. Можно смело нажимать всё подряд: «Сбросить демо» вернёт всё как было.</p>
+      <div class="of"><button class="btn pri lg" type="button" data-act="scnStart">${I("play")}Пройти сценарий, 3 минуты</button><button class="btn lg" type="button" data-act="introClose">Осмотреться самостоятельно</button></div>`), 350);
   }
-  acts.introClose = () => { ui.introSeen = true; App.saveUI(); App.closeOverlay(); };
   // показываем страницу, когда готовы и шрифт, и интерфейс: без пустых кнопок и сдвигов
   window.__ar = 1; if (window.__fr) document.documentElement.classList.remove("fl");
   // прогреваем кэш фото, чтобы при переходах они появлялись сразу

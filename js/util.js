@@ -1,4 +1,4 @@
-/* Общие помощники: форматирование, иконки, картинки-заглушки (фото коробок, QR). */
+/* Общие помощники: форматирование, иконки, фото, скачивание файлов. */
 window.App = window.App || {};
 (function (App) {
   "use strict";
@@ -15,19 +15,22 @@ window.App = window.App || {};
     return many;
   }
   const groups = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, NB);
-  const money = (n) => groups(Math.round(n)) + NB + "₽";
-  const moneyShort = (n) => (n >= 1e6 ? (Math.round(n / 1e4) / 100).toString().replace(".", ",") + NB + "млн" + NB + "₽" : money(n));
+  const num = (n, d) => Number(n).toFixed(d == null ? 2 : d).replace(".", ",");
+  const usd = (n) => (Math.round(n) < 0 ? "−" : "") + "$" + NB + groups(Math.abs(Math.round(n)));
   const kg = (n) => groups(Math.round(n)) + NB + "кг";
-  const vol = (n) => n.toFixed(2).replace(".", ",") + NB + "м³";
+  const vol = (n) => num(n, 2) + NB + "м³";
   const places = (n) => n + NB + plural(n, "место", "места", "мест");
+  const parse = (v) => parseFloat(String(v == null ? "" : v).replace(/\s/g, "").replace(",", ".")) || 0;
   const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   const pad = (n) => String(n).padStart(2, "0");
   const dShort = (t) => { const d = new Date(t); return pad(d.getDate()) + "." + pad(d.getMonth() + 1); };
+  const dFull = (t) => { const d = new Date(t); return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear(); };
   const dLong = (t) => { const d = new Date(t); return d.getDate() + NB + MONTHS[d.getMonth()]; };
   const hm = (t) => { const d = new Date(t); return pad(d.getHours()) + ":" + pad(d.getMinutes()); };
   function dayStart(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+  const dayDiff = (t) => Math.round((dayStart(Date.now()) - dayStart(t)) / 864e5);
   function when(t) {
-    const diff = Math.round((dayStart(Date.now()) - dayStart(t)) / 864e5);
+    const diff = dayDiff(t);
     if (diff === 0) return "сегодня" + NB + hm(t);
     if (diff === 1) return "вчера" + NB + hm(t);
     return dShort(t);
@@ -47,7 +50,6 @@ window.App = window.App || {};
     chat: '<path d="M4 5.5h16v10H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     camera: '<path d="M4 8h3l1.6-2.5h6.8L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.4"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
-    scan: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M4 12h16"/>',
     bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
@@ -56,16 +58,15 @@ window.App = window.App || {};
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     chevron: '<path d="m9 6 6 6-6 6"/>',
     back: '<path d="m15 6-6 6 6 6"/>',
+    down: '<path d="m6 9 6 6 6-6"/>',
     download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/>',
     file: '<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 13h6M9 16.5h6"/>',
-    qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>',
     home: '<path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/>',
     user: '<circle cx="12" cy="8.5" r="3.6"/><path d="M5 20c.9-3.6 3.6-5.6 7-5.6s6.1 2 7 5.6"/>',
     info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.4"/>',
     spark: '<path d="M12 3.5 13.8 10l6.7 2-6.7 2L12 20.5 10.2 14l-6.7-2 6.7-2z"/>',
     pin: '<path d="M12 21s-6.5-6.2-6.5-11.2a6.5 6.5 0 0 1 13 0C18.5 14.8 12 21 12 21z"/><circle cx="12" cy="9.8" r="2.4"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-    printer: '<path d="M7 9V4h10v5M7 17H4.5V9.5h15V17H17"/><rect x="7" y="14" width="10" height="6.5" rx="1"/>',
     alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4.5M12 17v.3"/>',
     send: '<path d="M4 12 20 4l-5 16-3.5-6.5z"/><path d="m11.5 13.5 3-3"/>',
     tg: '<path d="M20.5 4.5 3.5 11l5.5 2 2 6 3-3.5 4.5 3.5z"/><path d="m9 13 7.5-5.5"/>',
@@ -75,13 +76,21 @@ window.App = window.App || {};
     play: '<path d="M8 5.5v13l10-6.5z"/>',
     refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>',
     grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    monitor: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M8.5 20h7M12 16.5V20"/>',
+    phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    sliders: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+    dollar: '<path d="M12 3.5v17M16 7.6c-.6-1.3-2-2.1-4-2.1-2.3 0-3.8 1.1-3.8 2.9 0 4 8 2 8 6.2 0 1.8-1.6 3-4.2 3-2.2 0-3.7-.8-4.3-2.2"/>',
+    wh: '<path d="M3 20V9l9-5 9 5v11"/><path d="M7 20v-7h10v7M7 16.5h10"/>',
+    merge: '<path d="M6 4v4c0 3.5 6 3.5 6 7v5M18 4v4c0 3.5-6 3.5-6 7"/>',
+    lang: '<path d="M3.5 6h9M8 4v2M5.5 6c.6 3 2.6 5.4 6 6.8M10.5 6c-.6 3-2.7 5.4-6.5 6.8"/><path d="m13 20 3.5-8.5L20 20M14.2 17.3h4.6"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3A4 4 0 0 0 13 5.3l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    scale: '<path d="M12 4v16M6 20h12M5 8h14"/><path d="m5 8-2.5 6a2.7 2.7 0 0 0 5 0zM19 8l-2.5 6a2.7 2.7 0 0 0 5 0z"/>',
   };
   const icon = (name, cls) => `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ""}</svg>`;
 
-  // Детерминированный генератор случайных чисел для картинок
-  function rng(seed) { let s = (seed * 9301 + 49297) % 233280 || 1; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
-
-  // Реальные фото грузов (свободная лицензия, лежат локально в img/): приёмка и виды упаковки
+  // Настоящие фото грузов (свободная лицензия, лежат локально в img/): приёмка и виды упаковки
   const PHOTOS = {
     recv: ["recv-01.jpg", "recv-02.jpg", "recv-03.jpg", "recv-04.jpg", "recv-05.jpg", "recv-06.jpg"],
     box: ["pack-box-01.jpg", "pack-box-02.jpg"],
@@ -89,72 +98,12 @@ window.App = window.App || {};
     crate: ["pack-crate-01.jpg", "pack-crate-02.jpg"],
     sack: ["pack-sack-01.jpg", "pack-sack-02.jpg"],
   };
-  const packKind = (t) => ({ "Обрешётка": "crate", "Мешок": "sack", "Паллета": "pallet" }[t] || "box");
   function photo(seed, kind) {
     const pool = PHOTOS[kind] || PHOTOS.recv;
     const f = pool[Math.abs(Math.round(seed)) % pool.length];
     return `<img src="img/${f}" alt="" width="640" height="480" decoding="async" draggable="false">`;
   }
   const allPhotos = () => Object.values(PHOTOS).flat();
-
-  // Нарисованная коробка (запасной вариант, если фото не загрузились)
-  function photoSvg(seed, kind) {
-    const r = rng(seed + 11);
-    const tones = [["#d9b47c", "#c39558", "#a97a40"], ["#d4ab73", "#b98a4e", "#9c6f36"], ["#e0be8a", "#c9a067", "#ad8248"], ["#cfa66d", "#b48449", "#946a33"]];
-    const t = tones[Math.floor(r() * tones.length)];
-    const wall = ["#e9ecef", "#e5e7e3", "#eceae6", "#e3e8ec"][Math.floor(r() * 4)];
-    const floor = ["#c9cdd2", "#cfcbc3", "#c7cbc6", "#cdd1d6"][Math.floor(r() * 4)];
-    const dx = Math.round(r() * 10 - 5), two = r() > 0.45;
-    const boxAt = (ox, oy, s, c) => {
-      const X = (x) => ox + x * s, Y = (y) => oy + y * s;
-      const pts = (a) => a.map(([x, y]) => X(x) + "," + Y(y)).join(" ");
-      let g = `<polygon points="${pts([[0, 14], [36, 0], [72, 14], [36, 28]])}" fill="${c[0]}"/>`;
-      g += `<polygon points="${pts([[0, 14], [36, 28], [36, 62], [0, 48]])}" fill="${c[1]}"/>`;
-      g += `<polygon points="${pts([[36, 28], [72, 14], [72, 48], [36, 62]])}" fill="${c[2]}"/>`;
-      if (kind === "crate") {
-        const w = "#8a6236";
-        g += `<polygon points="${pts([[0, 14], [36, 28], [36, 32], [0, 18]])}" fill="${w}"/><polygon points="${pts([[0, 44], [36, 58], [36, 62], [0, 48]])}" fill="${w}"/>`;
-        g += `<polygon points="${pts([[36, 28], [72, 14], [72, 18], [36, 32]])}" fill="${w}"/><polygon points="${pts([[36, 58], [72, 44], [72, 48], [36, 62]])}" fill="${w}"/>`;
-        g += `<polygon points="${pts([[16, 20], [20, 22], [20, 56], [16, 54]])}" fill="${w}"/><polygon points="${pts([[52, 22], [56, 20], [56, 54], [52, 56]])}" fill="${w}"/>`;
-      } else {
-        g += `<polygon points="${pts([[16, 7.5], [20, 6], [56, 20], [52, 21.5]])}" fill="rgba(255,255,255,.35)"/>`;
-        g += `<polygon points="${pts([[52, 21.5], [56, 20], [56, 54], [52, 55.5]])}" fill="rgba(255,255,255,.28)"/>`;
-        g += `<polygon points="${pts([[8, 26], [26, 33], [26, 43], [8, 36]])}" fill="#fbf8f1"/>`;
-        g += `<polygon points="${pts([[10, 29.5], [22, 34.2], [22, 35.4], [10, 30.7]])}" fill="#9aa3ad"/><polygon points="${pts([[10, 32.5], [19, 36], [19, 37.2], [10, 33.7]])}" fill="#b9c0c7"/>`;
-      }
-      return g;
-    };
-    let body;
-    if (kind === "sack") {
-      body = `<ellipse cx="60" cy="80" rx="34" ry="5" fill="rgba(0,0,0,.12)"/>
-        <path d="M30 40c0-12 8-20 30-20s30 8 30 20v28c0 9-12 14-30 14s-30-5-30-14z" fill="#f3f1ea"/>
-        <path d="M30 40c0-12 8-20 30-20 6 0 11 .6 15 1.8-14 1-24 9-24 22v38c-13-1-21-5-21-12z" fill="#e4e0d5"/>
-        <path d="M46 22c4-5 24-5 28 0" stroke="#c9c3b5" stroke-width="2" fill="none"/>
-        <path d="M36 50h48M36 60h48" stroke="#d6d1c4" stroke-width="1" stroke-dasharray="2 2"/>
-        <rect x="52" y="46" width="18" height="11" rx="1.5" fill="#fff" stroke="#d6d1c4"/>`;
-    } else {
-      body = `<ellipse cx="62" cy="84" rx="42" ry="5" fill="rgba(0,0,0,.13)"/>`;
-      if (two) body += boxAt(44 + dx, 8, 0.62, [t[0], t[1], t[2]].map((c) => c));
-      body += boxAt(22 + dx, two ? 24 : 18, two ? 0.85 : 1, t);
-    }
-    return `<svg viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="120" height="90" fill="${wall}"/><rect y="58" width="120" height="32" fill="${floor}"/><rect y="57" width="120" height="1.5" fill="rgba(0,0,0,.06)"/>${body}</svg>`;
-  }
-
-  // Узор, похожий на QR-код: поисковые квадраты и детерминированный шум
-  function qr(seed) {
-    const n = 25, r = rng(seed + 5);
-    const finder = (x, y, fx, fy) => { const dx = x - fx, dy = y - fy; return dx === 0 || dy === 0 || dx === 6 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4); };
-    let d = "";
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-      let on;
-      const F = [[0, 0], [n - 7, 0], [0, n - 7]].find(([fx, fy]) => x >= fx && x < fx + 7 && y >= fy && y < fy + 7);
-      if (F) on = finder(x, y, F[0], F[1]);
-      else if ((x < 8 && y < 8) || (x >= n - 8 && y < 8) || (x < 8 && y >= n - 8)) on = false;
-      else on = r() < 0.47;
-      if (on) d += `M${x} ${y}h1v1h-1z`;
-    }
-    return `<svg viewBox="-1 -1 ${n + 2} ${n + 2}" shape-rendering="crispEdges" aria-hidden="true"><rect x="-1" y="-1" width="${n + 2}" height="${n + 2}" fill="#fff"/><path d="${d}" fill="#0f1b2d"/></svg>`;
-  }
 
   // Скачивание текстового файла (CSV для Excel) с BOM
   function download(name, text, type) {
@@ -166,6 +115,7 @@ window.App = window.App || {};
       return true;
     } catch (e) { return false; }
   }
+  const csv = (rows) => rows.map((r) => r.map((c) => { const s = String(c == null ? "" : c); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(";")).join("\r\n");
 
-  App.u = { NB, esc, plural, groups, money, moneyShort, kg, vol, places, dShort, dLong, hm, when, DAY, icon, photo, photoSvg, packKind, allPhotos, qr, download, pad };
+  App.u = { NB, esc, plural, groups, num, usd, kg, vol, places, parse, dShort, dFull, dLong, hm, when, dayDiff, DAY, icon, photo, allPhotos, download, csv, pad };
 })(window.App);
