@@ -1,7 +1,8 @@
 /* Данные прототипа и действия: всё хранится в браузере, сервер не нужен.
    Модель: приход (одна доставка поставщика на склад) → администратор организует упаковку: заказ с нашим трек-номером TT-<код клиента><номер>
    → склад собирает грузы и упаковывает (виды упаковки с количеством, размеры, вес) → груз под тем же трек-номером → отправка (вид доставки, маршрут, место назначения).
-   Заказ, груз и отправка носят один и тот же номер TT. Каждое действие пишется в историю: кто, когда, что сделал. */
+   Заказ, груз и отправка носят один и тот же номер TT. Номер подставляется сам, администратор может вписать свой и исправить его позже.
+   Каждое действие пишется в историю: кто, когда, что сделал. */
 (function (App) {
   "use strict";
   const u = App.u;
@@ -280,7 +281,25 @@
   const ready = (whId) => S.cargos.filter((c) => left(c) > 0 && inWh(c, whId)); // упакованы, ждут отправки
   const shipsOfCargo = (id) => S.ships.filter((s) => s.items.some((x) => x.cargoId === id));
   const taskPlaces = (t) => t.receiptIds.reduce((a, id) => a + ((rec(id) || {}).places || 0), 0);
-  const nextTT = (clientId) => "TT-" + clientId + S.seq.tt;
+  // наш трек-номер: автоматический TT-<код клиента><номер> или вписанный администратором вручную
+  const ttNorm = (v) => String(v == null ? "" : v).trim().toUpperCase();
+  const ttOwner = (id) => task(id) || cargo(id) || ship(id) || null;
+  const ttFree = (clientId) => { let n = S.seq.tt; while (ttOwner("TT-" + clientId + n)) n++; return n; };
+  const nextTT = (clientId) => "TT-" + clientId + ttFree(clientId);
+  // проверка номера перед сохранением: пустой, недопустимые знаки, занят другим грузом. self: номер груза, который исправляют
+  function ttCheck(v, self) {
+    const id = ttNorm(v);
+    if (!id) return "Впишите трек-номер или подставьте автоматический";
+    if (id.length > 24) return "Слишком длинный номер: не больше 24 знаков";
+    if (!/^[\p{L}\p{N}][\p{L}\p{N}._\/-]*$/u.test(id)) return "Только буквы, цифры, дефис, точка и косая черта, без пробелов";
+    if (self && id === self) return "";
+    const o = ttOwner(id);
+    if (o) return `Такой номер уже есть у другого груза (клиент ${o.clientId})`;
+    if (rec(id) || /^П-0\d+$/.test(id)) return "Такой номер занят приходом, выберите другой";
+    return "";
+  }
+  // «Подставить автоматически» при исправлении: свой автоматический номер груз сохраняет, после ручного выдаётся следующий свободный
+  const ttAutoFor = (id) => { const o = ttOwner(id); return !o ? "" : (task(id) || {}).manual ? nextTT(o.clientId) : id; };
   function totals(s) {
     let places = 0, weight = 0, volume = 0;
     s.items.forEach((x) => { const c = cargo(x.cargoId); if (!c) return; places += x.places; weight += (c.weight * x.places) / c.places; volume += (c.volume * x.places) / c.places; });
@@ -350,18 +369,42 @@
     changed(); emit("assigned", r);
     return r;
   }
-  // организовать упаковку: грузы одного клиента на одном складе; в этот момент присваивается наш трек-номер
+  // организовать упаковку: грузы одного клиента на одном складе; в этот момент присваивается наш трек-номер, автоматический или вписанный вручную (d.tt)
   function organize(recIds, d) {
     const list = recIds.map(rec).filter((r) => r && r.clientId && !r.cargoId && !r.taskId); if (!list.length) return null;
     const rs = list.filter((r) => r.clientId === list[0].clientId && r.wh === list[0].wh), now = Date.now();
-    const t = { id: "TT-" + rs[0].clientId + S.seq.tt++, wh: rs[0].wh, clientId: rs[0].clientId, receiptIds: rs.map((r) => r.id), name: String(d.name || "").trim().slice(0, 80), packPlan: (d.packPlan || []).filter((k) => PACK.includes(k)),
+    const n = ttFree(rs[0].clientId), auto = "TT-" + rs[0].clientId + n, want = ttNorm(d.tt), manual = !!want && want !== auto;
+    if (manual && ttCheck(want)) return null;
+    if (!manual) S.seq.tt = n + 1;
+    const t = { id: manual ? want : auto, manual, wh: rs[0].wh, clientId: rs[0].clientId, receiptIds: rs.map((r) => r.id), name: String(d.name || "").trim().slice(0, 80), packPlan: (d.packPlan || []).filter((k) => PACK.includes(k)),
       transport: TRANSPORT[d.transport] ? d.transport : "", note: String(d.note || "").trim().slice(0, 200), date: d.date || now, at: now, by: d.by || "ramil", status: "collect", collectedAt: null, collectedBy: null, doneAt: null, doneBy: null, fresh: true };
     rs.forEach((r) => { r.taskId = t.id; r.fresh = false; r.lost = false; (S.hide[r.id] || []).forEach((k) => { (S.hide[t.id] = S.hide[t.id] || []).includes(k) || S.hide[t.id].push(k); }); });
     S.tasks.push(t);
     notify(t.clientId, `Ваш груз готовят к упаковке. Трек-номер ${t.id}: по нему можно следить за грузом.`, { t: "rec", id: rs[0].id });
     logAdd("packcmd", t.by, LT.packcmd(t), chainIds("task", t), t.clientId);
+    if (manual) logAdd("tt", t.by, `Трек-номер: задан вручную, ${t.id} вместо автоматического ${auto}`, chainIds("task", t), t.clientId);
     changed(); emit("packcmd", t);
     return t;
+  }
+  // исправление трек-номера: он общий у заказа, груза и отправки, поэтому меняется во всей цепочке, в истории, документах и уведомлениях
+  function setTT(oldId, v, by) {
+    const id = ttNorm(v), t = task(oldId), c = cargo(oldId), s = ship(oldId), o = s || c || t;
+    if (!o || id === oldId || ttCheck(id, oldId)) return null;
+    const n = ttFree(o.clientId), auto = id === "TT-" + o.clientId + n, ren = (x) => (x === oldId ? id : x);
+    if (auto) S.seq.tt = n + 1;
+    if (t) { t.id = id; t.manual = !auto; }
+    if (c) { c.id = id; c.taskId = ren(c.taskId); }
+    if (s) { s.id = id; s.docs.forEach((x) => { x.name = x.name.split(oldId).join(id); }); }
+    S.ships.forEach((x) => x.items.forEach((y) => { y.cargoId = ren(y.cargoId); }));
+    S.receipts.forEach((r) => { r.taskId = ren(r.taskId); r.cargoId = ren(r.cargoId); });
+    if (S.hide[oldId]) { S.hide[id] = S.hide[oldId]; delete S.hide[oldId]; }
+    S.log.forEach((e) => { e.ids = e.ids.map(ren); });
+    S.notes.forEach((x) => { if (x.ref && x.ref.t !== "rec" && x.ref.id === oldId) x.ref.id = id; });
+    S.chats.forEach((x) => { if (x.ref.t !== "rec" && x.ref.id === oldId) { x.ref.id = id; x.id = "T-" + id; } });
+    logAdd("tt", by, `Трек-номер: изменён, был ${oldId}, стал ${id}${auto ? ", автоматический" : ", задан вручную"}`, chainIds(s ? "ship" : c ? "cargo" : "task", o), o.clientId);
+    notify(o.clientId, `Трек-номер вашего груза изменён: был ${oldId}, теперь ${id}. Следите за грузом по новому номеру.`, s ? { t: "ship", id } : c ? { t: "cargo", id } : { t: "rec", id: t.receiptIds[0] });
+    emit("renamed", { from: oldId, to: id }); changed();
+    return id;
   }
   // сборка: склад отмечает найденные грузы; ненайденный остаётся на складе, это видно в истории
   function collect(taskId, foundIds, by) {
@@ -568,7 +611,7 @@
   load();
   App.store = {
     get S() { return S; }, get STAFF() { return S.staff; }, ME, KEY, UIKEY, WH, PACK, PACK_RU, ROUTES, DEST, TRANSPORT, TK, CUR, WH_STAFF, SECTIONS, FUNCS, PRESETS, DENS, TARIFF_T,
-    on, emit, save, reset, who, wh, client, rec, task, cargo, ship, left, waiting, unknown, openTasks, ready, shipsOfCargo, taskPlaces, nextTT, totals, chainIds, isPaid, money, findClient, expectedByTrack, noteText, doorOpen, cnyUsd,
+    on, emit, save, reset, who, wh, client, rec, task, cargo, ship, left, waiting, unknown, openTasks, ready, shipsOfCargo, taskPlaces, nextTT, ttNorm, ttCheck, ttAutoFor, setTT, totals, chainIds, isPaid, money, findClient, expectedByTrack, noteText, doorOpen, cnyUsd,
     packsSum, packsText, dimsVolume, dimsPlaces, tariffCalc, tariffLabel, addExpected, removeExpected, accept, assignUnknown, organize, collect, pack, send, editShip, removeRec, cancelTask, arrive, issue, setPaid, addDoc, setAccess, applyPreset, createStaff, loginCheck, hidden, setHide, setSales, readNotes, setTg,
     pay, setExp, expSum, setTariff, thread, threadFor, unread, unreadAll, chatSend, chatRead,
   };

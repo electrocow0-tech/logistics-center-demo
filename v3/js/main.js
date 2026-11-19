@@ -20,7 +20,7 @@
   const ui = (App.ui = Object.assign(DEF(), loadUI()));
   App.saveUI = () => { try { localStorage.setItem(st.UIKEY, JSON.stringify(ui)); } catch (e) { /* без сохранения */ } };
   const TMP = () => ({ acc: null, dacc: null, pack: {}, col: {}, aw: null, q: "", clientsQ: "", whF: "all", laneAll: {}, wtab: "stock", wcode: null, wq: "", wsort: "new", csel: [], psel: [], wbind: null, period: 90, chat: null, chatText: "", ptext: {}, issue: null, pay: null,
-    org: null, snd: null, sed: null, nst: null, tp: null, bind: null, card: null, mk: null, accq: "", cf: null, dn: { q: "", per: "all" }, rpm: "this", staffSel: "timur", hist: { who: "all", q: "", all: false } });
+    org: null, snd: null, sed: null, tte: null, nst: null, tp: null, bind: null, card: null, mk: null, accq: "", cf: null, dn: { q: "", per: "all" }, rpm: "this", staffSel: "timur", hist: { who: "all", q: "", all: false } });
   App.tmp = TMP();
   App.cur = 0; // телефон, в котором произошло действие: 0 склад, 1 клиент
   App.slotFor = (role) => (role === "client" ? 1 : 0);
@@ -225,6 +225,20 @@
   // окна и шторки уезжают за край контейнера: сам контейнер прокручиваться не должен (фокус в поле, клавиатура телефона)
   document.addEventListener("scroll", (e) => { const t = e.target; if (t && t.classList && (t.classList.contains("screen") || t.classList.contains("desk") || t.classList.contains("app") || t.classList.contains("stage")) && (t.scrollTop || t.scrollLeft)) { t.scrollTop = 0; t.scrollLeft = 0; } }, true);
 
+  // трек-номер исправили: всё, что открыто под старым номером (экраны телефонов, окна, выбор, шаг сценария), переходит на новый
+  st.on("renamed", ({ from, to }) => {
+    const fix = (v) => (v === from ? to : v === "T-" + from ? "T-" + to : typeof v === "string" && v.slice(v.indexOf(":") + 1) === from && v.indexOf(":") > 0 ? v.slice(0, v.indexOf(":") + 1) + to : v);
+    const t = App.tmp;
+    ui.slots.forEach((s) => { s.p = fix(s.p); });
+    ui.deskP = fix(ui.deskP);
+    if (ui.scn.ttId === from) ui.scn.ttId = to;
+    ["card", "tp", "sed", "tte", "issue"].forEach((k) => { if (t[k] && t[k].id === from) t[k].id = to; });
+    t.psel = (t.psel || []).map(fix); if (t.snd) t.snd.ids = t.snd.ids.map(fix);
+    [t.pack, t.col].forEach((m) => { if (m && m[from]) { m[to] = m[from]; delete m[from]; } });
+    if (t.hist.q.trim().toUpperCase() === from) t.hist.q = to;
+    App.saveUI();
+  });
+
   // изменения данных → мягкая перерисовка
   let refT = 0;
   st.on("change", () => { clearTimeout(refT); refT = setTimeout(() => App.refresh(), 0); });
@@ -261,7 +275,7 @@
     setTimeout(() => App.overlay(`<span class="opt">${I("spark")}<span class="ol">Прототип</span></span>
       <h2>Центр логистики: новая версия прототипа</h2>
       <p>Мы переделали прототип по вашему ТЗ. Вверху три вкладки: «Администратор» (рабочее окно), «Склад в Китае» и «Клиент» (их телефоны). Всё, что делает один, сразу видно у остальных.</p>
-      <ul><li>Грузы на складе по кодам клиентов: отметили несколько и организовали упаковку</li><li>Наш трек-номер вида TT-D0512727 присваивается сам, клиент следит за грузом по нему</li><li>Склад: приёмка со сканированием, сборка, упаковка с размерами, список и отчёт</li><li>Отправка с маршрутом и местом назначения, прибытие и выдача</li><li>Сотрудники и доступы, история действий: кто, когда, что сделал</li></ul>
+      <ul><li>Грузы на складе по кодам клиентов: отметили несколько и организовали упаковку</li><li>Наш трек-номер вида TT-D0512727 присваивается сам или вписывается вручную, клиент следит за грузом по нему</li><li>Склад: приёмка со сканированием, сборка, упаковка с размерами, список и отчёт</li><li>Отправка с маршрутом и местом назначения, прибытие и выдача</li><li>Сотрудники и доступы, история действий: кто, когда, что сделал</li></ul>
       <p class="muted">Данные вымышленные. Можно смело нажимать всё подряд: «Сбросить демо» вернёт всё как было.</p>
       <div class="of"><button class="btn pri lg" type="button" data-act="scnStart">${I("play")}Пройти сценарий, 4 минуты</button><button class="btn lg" type="button" data-act="introClose">Осмотреться самостоятельно</button></div>`), 350);
   }

@@ -266,6 +266,7 @@ button.kpi:hover{box-shadow:var(--sh-2),0 0 0 1px var(--line-2)}
 .x.sm .ic{width:15px;height:15px}
 .modal{position:absolute;left:50%;top:50%;width:min(500px,92%);max-height:92%;overflow:auto;background:var(--white);border-radius:20px;box-shadow:0 40px 80px -30px rgba(15,27,45,.5);transform:translate(-50%,-46%) scale(.98);opacity:0;pointer-events:none;transition:opacity .2s,transform .24s var(--ease);z-index:7;padding:20px 22px}
 .modal.wide{width:min(720px,94%)}
+@media(min-width:700px){.modal.wide{max-height:96%}}
 .modal.show{opacity:1;transform:translate(-50%,-50%);pointer-events:auto}
 .modal h2{margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;flex-wrap:wrap;gap:4px 0}
 .modal .mh{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
@@ -988,12 +989,59 @@ span.sw{display:inline-block}
 .chipt{display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:4px 12px 4px 8px;border-radius:999px;background:var(--soft);font-size:12.5px;font-weight:600;border:1.5px solid transparent;transition:background .15s,border-color .15s;text-align:left}
 .chipt.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d)}
 .chipt .cb{width:18px;height:18px}
-.org-top{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px}
-.tt-box{display:grid;gap:1px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#0f1b2d,#22314a);color:#fff;min-width:0;align-content:center}
+.org-top{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,1fr);gap:10px}
+.tt-box{display:grid;gap:1px;padding:10px 14px;border-radius:14px;background:linear-gradient(135deg,#0f1b2d,#22314a);color:#fff;min-width:0;align-content:center}
 .tt-box small{font-size:11.5px;opacity:.75}
 .tt-box b{font-size:22px;letter-spacing:.02em;line-height:1.2;overflow-wrap:anywhere}
 .tt-box.plain{background:var(--soft);color:var(--ink)}
 .tt-box.plain small{opacity:1;color:var(--muted)}
+/* поле «Наш трек-номер»: автоматический номер подставлен, можно вписать свой; под полем всегда одна строка сообщения, вёрстка не прыгает */
+.ttf{display:grid;gap:5px;min-width:0}
+.ttf-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.ttf-r .inp{flex:1 1 150px;width:auto;font-weight:700;text-transform:uppercase}
+.ttf-r .inp::placeholder{text-transform:none}
+.ttf-r .btn{height:44px}
+.ttf-m{font-size:12px;line-height:1.35;color:var(--muted);min-height:16px;overflow-wrap:anywhere}
+.ttf.err .inp{border-color:var(--alert);box-shadow:0 0 0 4px rgba(229,72,77,.16)}
+.ttf.err .ttf-m{color:var(--alert);font-weight:600}
+.tt-box .ttf{margin-top:5px}
+.tt-box .ttf-r .inp{background:#fff;color:var(--ink);font-size:18px}
+.tt-box .ttf-r .btn{background:rgba(255,255,255,.14);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
+.tt-box .ttf-r .btn:hover{background:rgba(255,255,255,.24)}
+.tt-box .ttf-m{color:rgba(255,255,255,.75)}
+.tt-box .ttf.err .ttf-m{color:#ffb9bb}
+.kv dd.tt-dd{display:flex;align-items:center;gap:4px 10px;flex-wrap:wrap}
+.lnkb{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:8px;font-size:12px;font-weight:600;color:var(--accent-d);background:var(--accent-soft);white-space:nowrap;transition:background .15s}
+.lnkb:hover{background:#d5efe5}
+.lnkb .ic{width:13px;height:13px}
+/* все грузы клиента на складе: блок в большой карточке, отметка на доске, нажимаемый код клиента */
+.sc .code.go{text-decoration:underline dotted #b3bfcd;text-underline-offset:3px;border-radius:4px}
+.sc .code.go:hover{color:var(--accent-d);text-decoration:underline solid var(--accent)}
+.sc .more{justify-self:start;max-width:100%;font-size:10.5px;font-weight:600;line-height:1.25;color:var(--accent-d);background:var(--accent-soft);border-radius:8px;padding:3px 7px;margin-top:5px;overflow-wrap:anywhere}
+.tag.code.go{cursor:pointer;transition:background .15s}
+.tag.code.go:hover{background:var(--accent-d)}
+.cg{grid-column:1/-1;display:grid;gap:12px;min-width:0;background:var(--white);border-radius:var(--r);box-shadow:var(--sh-1),0 0 0 1px var(--line-2);padding:14px 16px 16px}
+.cg-h{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;min-width:0}
+.cg-t{flex:1 1 300px;min-width:0}
+.cg-t h3{margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cg-t h3 .ic{color:var(--accent);flex:none}
+.cg-t small{display:block;font-size:12.5px;color:var(--muted);margin-top:3px}
+.cg-n{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--ink);color:#fff;font-size:12px;font-weight:700}
+.cg-l{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.cgc{position:relative;display:grid;grid-template-columns:78px minmax(0,1fr);gap:10px;align-items:center;text-align:left;padding:8px 10px 8px 8px;border-radius:14px;background:var(--soft-2);box-shadow:0 0 0 1px var(--line-2);min-width:0;transition:box-shadow .15s,background .15s}
+.cgc:hover{background:var(--soft)}
+.cgc.on{background:var(--accent-soft);box-shadow:0 0 0 2px var(--accent)}
+.cgc.on::after{content:"этот груз";position:absolute;top:-8px;right:10px;font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:999px;background:var(--accent);color:#fff}
+.cgc-ph{position:relative;display:grid;place-items:center;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:var(--soft);color:var(--faint)}
+.cgc-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.cgc-ph .dmgi{position:absolute;right:4px;top:4px;box-shadow:0 0 0 2px #fff}
+.cgc-t{display:grid;gap:1px;min-width:0}
+.cgc-t b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cgc-t small{font-size:12px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cgc-m{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* наш трек-номер может быть длинным (свой номер администратора): на доске и на телефонах он переносится, а не обрезается */
+.sc .f>span.tt{white-space:normal;overflow-wrap:anywhere}
+.pcard .id.tt{display:block;white-space:normal;overflow-wrap:anywhere;line-height:1.25}
 .choice.cols4 button{justify-content:center;text-align:center;padding:8px 6px;font-size:13px}
 /* упаковка: количество по видам, размеры строками, объём считается сам */
 .dims{display:grid;gap:6px;margin-bottom:8px}
@@ -1078,4 +1126,9 @@ button.ph-i{padding:0;cursor:zoom-in}
   .ms-roles button .ic{display:none}
   .ms-roles .dot{width:7px;height:7px;border-radius:50%;background:var(--alert);opacity:0}
   .ms-roles .dot.show{opacity:1}
+  .cg{padding:12px 12px 14px}
+  .org-top{grid-template-columns:minmax(0,1fr)}
+  .ttf-r .btn{flex:1 1 100%}
+  .cg-h .btn{flex:1 1 100%}
+  .cg-l{grid-template-columns:minmax(0,1fr)}
 }
