@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<style>html,body{background:#eef1f5;margin:0}.fl body{visibility:hidden}</style>
+<script>document.documentElement.classList.add("fl")</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#eef1f5">
+<title>Центр логистики · прототип</title>
+<link rel="preload" href="fonts/geologica-cyrillic-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/geologica-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/fonts.css?v=aacd241ad2">
+<link rel="stylesheet" href="css/app.css?v=aacd241ad2">
+<script>/* страница показывается, когда шрифт загружен: без подмены шрифта и сдвигов */(function(d){var done=function(){window.__fr=1;if(window.__ar)d.classList.remove("fl")};if(document.fonts&&document.fonts.load){Promise.all(["400 14px Geologica","700 14px Geologica"].map(function(f){return document.fonts.load(f,"АБВабвABCabc0123")})).then(done,done)}else{done()}setTimeout(function(){d.classList.remove("fl")},1800)})(document.documentElement)</script>
+</head>
+<body data-mode="admin" data-scn="off">
+<header class="topbar">
+  <div class="brand"><span class="mk" id="brandMark"></span><span class="bn">Центр логистики</span><small>прототип</small></div>
+  <div class="seg mode" id="modeSeg" role="tablist" aria-label="Кто работает"></div>
+  <div class="tb-right">
+    <button class="btn" type="button" data-act="scnOpen" id="btnScn"></button>
+    <button class="btn ghost" type="button" data-act="reset" id="btnReset"></button>
+  </div>
+</header>
+<div class="mstrip" id="mstrip">
+  <div class="ms-roles" id="msRoles"></div>
+  <div class="ms-scn" id="msScn"></div>
+  <button class="ms-menu" type="button" data-act="menu" id="msMenu" aria-label="Меню прототипа"></button>
+</div>
+
+<main class="stage">
+  <section class="desk" aria-label="Рабочее окно администратора">
+    <div class="chrome"><i></i><i></i><i></i><div class="cbar" id="cbar"></div></div>
+    <div class="app">
+      <aside class="side"><div class="view" id="side"></div></aside>
+      <div class="main" id="deskScroll"><div class="view" id="deskView"></div></div>
+      <div class="dim" id="deskDim" data-act="closeDesk"></div>
+      <div class="modal" id="modal"></div>
+      <div class="dpush" id="dpush" data-act="dpushOpen"></div>
+    </div>
+  </section>
+  <section class="phones" id="phones" data-n="2" aria-label="Экраны телефонов">
+    <div class="pslot" id="ps0" data-slot="0"></div>
+    <div class="pslot" id="ps1" data-slot="1"></div>
+  </section>
+</main>
+<footer class="dock" aria-label="Сценарий"><div class="view dock-in" id="dock"></div></footer>
+<div class="ov" id="ov"><div class="card" id="ovCard"></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/util.js?v=aacd241ad2"></script>
+<script src="js/i18n.js?v=aacd241ad2"></script>
+<script src="js/store.js?v=aacd241ad2"></script>
+<script src="js/desk.js?v=aacd241ad2"></script>
+<script src="js/desk2.js?v=aacd241ad2"></script>
+<script src="js/phone.js?v=aacd241ad2"></script>
+<script src="js/scenario.js?v=aacd241ad2"></script>
+<script src="js/main.js?v=aacd241ad2"></script>
+</body>
+</html>

@@ -1,0 +1,747 @@
+/* Рабочее окно администратора: он может выполнить любой шаг сам. Сотрудников и то, что они видят, он настраивает в «Сотрудники и доступы».
+   Режим «Войти под этим сотрудником» показывает тот же интерфейс с его ограничениями: меню, клиенты, деньги, действия. */
+(function (App) {
+  "use strict";
+  const u = App.u, st = App.store, I = u.icon, E = u.esc, L = App.i18n.of("ru"), $ = (id) => document.getElementById(id);
+
+  // ---------- доступы: администратору доступно всё; под сотрудником действуют его разделы, клиенты, деньги и действия ----------
+  const asId = () => (App.ui.viewAs && st.S.access[App.ui.viewAs] ? App.ui.viewAs : null);
+  const acc = () => (asId() ? st.S.access[asId()] : null);
+  const actor = () => asId() || "ramil";
+  const can = (fn) => { const a = acc(); return !a || !!a.fn[fn]; };
+  const sec = (k) => { const a = acc(); return !a ? true : k === "staff" ? false : !!a.sec[k]; };
+  const seeMoney = () => can("cost");
+  const mine = (cid) => { const a = acc(); return !a || a.scope !== "sel" || (!!cid && a.clients.includes(cid)); };
+  const vis = (o) => mine(o.clientId);
+  const setName = (k) => { const a = st.S.access[k]; return a && a.preset && st.PRESETS[a.preset] ? "набор прав «" + st.PRESETS[a.preset][0].replace("как ", "") + "»" : st.STAFF[k].role.toLowerCase(); };
+
+  const pill = (s, lg, label) => `<span class="st${lg ? " lg" : ""}" data-st="${s}">${label || L.t("st_" + s)}</span>`;
+  const stg = (n) => `<em class="stg s${n}">Этап ${n}</em>`;
+  const optBtn = (k, label) => `<button class="opt" type="button" data-act="opt" data-k="${k}">${I((App.OPT[k] || {}).icon || "spark")}<span class="ol">${E(label)}</span><i>опция</i></button>`;
+  const cname = (id) => (st.client(id) || {}).name || "Клиент не указан";
+  const whn = (id) => st.wh(id).ru;
+  const TR = (k) => st.TRANSPORT[k] || st.TRANSPORT.auto;
+  const trText = (k) => (st.TRANSPORT[k] ? st.TRANSPORT[k].t : "пока не указан");
+  const recsWord = (n) => n + " " + u.plural(n, "груз", "груза", "грузов");
+  const paidPill = (s) => (st.isPaid(s) ? '<span class="st" data-st="in">оплачено</span>' : s.paidUsd > 0 ? `<span class="st" data-st="pack">оплачено ${u.usd(s.paidUsd)}</span>` : '<span class="st" data-st="unk">не оплачено</span>');
+  const xBtn = `<button class="x" type="button" data-act="closeDesk" aria-label="Закрыть">${I("x")}</button>`;
+  const today = () => new Date().toISOString().slice(0, 10);
+  const dISO = (t) => { const d = new Date(t); return d.getFullYear() + "-" + u.pad(d.getMonth() + 1) + "-" + u.pad(d.getDate()); };
+  const fromISO = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || "")); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12).getTime() : null; };
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  const delivText = (r) => (r.dpay === "supplier" ? "оплатил поставщик" : r.deliv ? `${u.cny(r.deliv)} (≈ ${u.usd(st.cnyUsd(r.deliv))})` : "не указана");
+  const plan = (a) => (a || []).map((k) => st.PACK_RU[k]).join(", ") || "на усмотрение склада";
+  const tsPill = (t) => `<span class="st" data-st="${t.status === "collect" ? "wait" : "pack"}">${t.status === "collect" ? "Сборка: склад ищет грузы" : "Упаковка: склад пакует"}</span>`;
+
+  // ---------- меню ----------
+  const SCREEN_SEC = { board: "cargo", work: "cargo", clients: "clients", client: "clients", cons: "ships", money: "money", profit: "money", tariffs: "money", chat: "chat", reports: "reports", staff: "staff", history: "history" };
+  const NAV = [["board", "board", "Грузы (информация)"], ["work", "layers", "Грузы"], ["clients", "users", "Клиенты"], ["cons", "truck", "Отправки"], ["money", "wallet", "Деньги", 2], ["chat", "lang", "Чат", 3], ["reports", "chart", "Отчёты"], ["staff", "shield", "Сотрудники и доступы"], ["history", "history", "История действий"]];
+  const allowed = (s) => s === "included" || (!!SCREEN_SEC[s] && sec(SCREEN_SEC[s]));
+  const home = () => { const n = NAV.find((x) => allowed(x[0])); return n ? n[0] : "included"; };
+  function counts() {
+    const S = st.S;
+    return {
+      work: st.waiting().filter(vis).length + st.openTasks().filter(vis).length + st.ready().filter(vis).length,
+      clients: S.clients.filter((c) => mine(c.id)).length,
+      cons: S.ships.filter((s) => s.status !== "done" && vis(s)).length,
+      chat: st.unreadAll("ru") || null,
+    };
+  }
+  function side(cur) {
+    const c = counts(), curNav = cur === "client" ? "clients" : cur === "profit" || cur === "tariffs" ? "money" : cur, p = st.STAFF[actor()];
+    const items = NAV.filter((x) => allowed(x[0])).map((x) => `<a data-act="d" data-s="${x[0]}" class="${curNav === x[0] ? "on" : ""}" data-nav="${x[0]}">${I(x[1])}<span>${x[2]}</span>${x[3] ? stg(x[3]) : ""}${c[x[0]] != null ? `<b${x[0] === "chat" ? ' class="hot"' : ""}>${c[x[0]]}</b>` : ""}</a>`).join("");
+    return `<div class="nav">${items}</div><div class="sep"></div>
+      <div class="nav"><a data-act="d" data-s="included" class="${cur === "included" ? "on" : ""}" data-nav="included">${I("grid")}<span>Что входит</span></a></div>
+      <div class="me"><span class="ava">${E(p.ava)}</span><span>${E(p.ru)}<small>${E(p.role)}</small></span></div>`;
+  }
+  function chromeBar() {
+    const v = asId();
+    if (!v) return `<span class="cb-t">${I("monitor")}<span>Рабочее место администратора</span></span><span class="who">Рамиль · видит всё и может сделать любой шаг сам</span>`;
+    const p = st.STAFF[v], a = acc();
+    return `<span class="cb-as">${I("eye")}<span class="ell1">Вы вошли как <b>${E(p.ru)}</b>, ${E(setName(v))}: ${a.scope === "sel" ? "только выбранные клиенты" : "все клиенты"}${a.fn.cost ? "" : ", без стоимости"}</span></span><button class="btn sm dark" type="button" data-act="viewBack" id="btnViewBack">${I("back")}<span class="lg">Вернуться к администратору</span><span class="sm">Вернуться</span></button>`;
+  }
+
+  // ---------- подсказки при наборе: код или название клиента ----------
+  const taKeys = { acc: { none: true }, dacc: { none: true } };
+  function taItems(key, q) {
+    const s = String(q || "").trim().toUpperCase(), all = /^(acc|pbind)$/.test(key);
+    const list = st.findClient(/ · /.test(q) ? "" : q).filter((c) => all || mine(c.id)).sort((a, b) => (b.id.indexOf(s) === 0 ? 1 : 0) - (a.id.indexOf(s) === 0 ? 1 : 0) || (b.name.toUpperCase().indexOf(s) === 0 ? 1 : 0) - (a.name.toUpperCase().indexOf(s) === 0 ? 1 : 0)).slice(0, 6), none = App.taEmpty && App.taEmpty[key] ? App.taEmpty[key]() : "Никого не нашли";
+    return list.map((c, i) => `<button type="button" class="${i === 0 ? "hl" : ""}" data-act="taPick" data-k="${key}" data-v="${c.id}" tabindex="-1"><b>${E(c.id)}</b><span>${E(c.name)}</span></button>`).join("") || `<p class="muted s13">${E(none)}</p>`;
+  }
+  // поле с выпадающими подсказками; выбранный клиент показывается как «код · название»
+  function ta(key, o) {
+    const c = o.val ? st.client(o.val) : null;
+    return `<div class="ta${o.flow ? " flow" : ""}${o.up ? " up" : ""}" data-ta="${key}"><span class="ta-i">${I("search")}</span><input class="inp" data-in="taQ" data-k="${key}" value="${c ? E(c.id + " · " + c.name) : E(o.q || "")}" placeholder="${E(o.ph || "Код или название клиента")}" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list"${o.hl ? ` data-hl="${o.hl}"` : ""}><div class="ta-l" hidden></div></div>`;
+  }
+  const taBox = (el) => el.parentElement.querySelector(".ta-l");
+  function taShow(el) { const l = taBox(el); l.innerHTML = taItems(el.dataset.k, el.value); l.hidden = false; }
+  function taHide(el) { const l = el && taBox(el); if (l) l.hidden = true; }
+  App.ta = ta; App.taPick = {}; App.taType = {};
+  document.addEventListener("focusin", (e) => { const el = e.target; if (el && el.dataset && el.dataset.in === "taQ") { taShow(el); try { el.select(); } catch (x) { /* не текстовое поле */ } } });
+  document.addEventListener("focusout", (e) => { const el = e.target; if (el && el.dataset && el.dataset.in === "taQ") setTimeout(() => { if (document.activeElement !== el) taHide(el); }, 180); });
+  document.addEventListener("keydown", (e) => {
+    const el = e.target; if (!el || !el.dataset || el.dataset.in !== "taQ") return;
+    const l = taBox(el), items = [...l.querySelectorAll("button")], i = items.findIndex((b) => b.classList.contains("hl"));
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (l.hidden) { taShow(el); return; } if (!items.length) return; const n = (i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length; items.forEach((b, j) => b.classList.toggle("hl", j === n)); }
+    else if (e.key === "Enter") { e.preventDefault(); const b = items[Math.max(0, i)]; if (b && !l.hidden) b.click(); }
+    else if (e.key === "Escape") { e.stopPropagation(); taHide(el); }
+  }, true);
+
+  // ---------- доска «Грузы (информация)»: только обзор, карточка открывается большим окном ----------
+  const STAGES = ["in", "packing", "pack", "way", "arrived", "done"];
+  function sc(stage, t, id, o) {
+    return `<button class="sc${o.fresh ? " new" : ""}" type="button" data-act="openItem" data-t="${t}" data-id="${id}" data-bc="${t}:${id}">
+      <span class="t"><span class="code">${E(o.code)}</span>${o.dmg ? '<i class="dmg" title="Есть повреждение"></i>' : ""}<span class="pl">${o.pl}</span></span>
+      <span class="nm">${E(o.name || cname(o.code))}</span><span class="sp">${o.sp}</span>
+      <span class="f"><span>${o.meta}</span></span></button>`;
+  }
+  const recCard = (r) => sc("in", "rec", r.id, { fresh: r.fresh, code: r.clientId, dmg: !!r.damage, pl: u.places(r.places), sp: E(r.supplier), meta: E(r.id) + " · " + E(whn(r.wh)) });
+  const unkCard = (r) => sc("unk", "rec", r.id, { fresh: r.fresh, code: "Без кода", name: st.noteText(r) || "Маркировки нет", dmg: !!r.damage, pl: "", sp: u.places(r.places) + " · нужен клиент", meta: E(r.id) + " · " + E(whn(r.wh)) });
+  const taskCard = (t) => sc("packing", "task", t.id, { fresh: t.fresh, code: t.clientId, pl: u.places(st.taskPlaces(t)), sp: (t.status === "collect" ? "сборка" : "упаковка") + " · " + E(whn(t.wh)), meta: E(t.id) });
+  const cargoCard = (c) => sc("pack", "cargo", c.id, { fresh: c.fresh, code: c.clientId, pl: u.places(c.places), sp: `${u.kg(c.weight)} · ${u.vol(c.volume)}`, meta: E(c.id) });
+  function shipCard(s) {
+    const t = st.totals(s);
+    return sc(s.status, "ship", s.id, { fresh: s.fresh, code: s.clientId, pl: u.places(t.places),
+      sp: E(s.route) + " · " + (s.status === "way" ? "≈" + u.NB + u.dShort(s.eta) : s.status === "arrived" ? E(s.dest) : s.issue && s.issue.type === "tk" ? "ТК " + E(s.issue.tk) : "выдан клиенту"), meta: E(s.id) });
+  }
+  function boardData() {
+    const S = st.S, q = App.tmp.q.trim().toUpperCase(), f = App.tmp.whF;
+    const txt = (cid, a) => !q || [cid, cname(cid)].concat(a).some((x) => String(x || "").toUpperCase().includes(q));
+    const whOk = (o) => f === "all" || o.wh === f, shipWh = (s) => f === "all" || (st.cargo(s.id) || {}).wh === f;
+    const fr = (a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0);
+    const ships = (status) => S.ships.filter((s) => s.status === status && vis(s) && shipWh(s) && txt(s.clientId, [s.id, s.route]));
+    return {
+      unk: st.unknown().filter((r) => vis(r) && whOk(r) && (!q || [r.id, r.track, st.noteText(r)].some((x) => String(x || "").toUpperCase().includes(q)))).sort((a, b) => b.at - a.at),
+      in: st.waiting().filter((r) => vis(r) && whOk(r) && txt(r.clientId, [r.id, r.supplier, r.track])).sort((a, b) => fr(a, b) || b.at - a.at),
+      packing: st.openTasks().filter((t) => vis(t) && whOk(t) && txt(t.clientId, [t.id, t.name])).sort((a, b) => fr(a, b) || b.at - a.at),
+      pack: st.ready().filter((c) => vis(c) && whOk(c) && txt(c.clientId, [c.id, c.name])).sort((a, b) => fr(a, b) || b.at - a.at),
+      way: ships("way").sort((a, b) => fr(a, b) || a.eta - b.eta),
+      arrived: ships("arrived").sort((a, b) => fr(a, b) || b.arrivedAt - a.arrivedAt),
+      done: ships("done").sort((a, b) => b.doneAt - a.doneAt),
+    };
+  }
+  const LIM = { unk: 5, in: 5, packing: 5, pack: 5, way: 5, arrived: 5, done: 3 };
+  function board() {
+    const d = boardData(), f = App.tmp.whF, all = App.tmp.laneAll || {};
+    const render = { unk: unkCard, in: recCard, packing: taskCard, pack: cargoCard, way: shipCard, arrived: shipCard, done: shipCard };
+    const lanes = ["unk"].concat(STAGES).map((k) => {
+      const list = d[k], shown = all[k] ? list : list.slice(0, LIM[k]);
+      return `<div class="lane" data-lane="${k}"><div class="lane-h">${pill(k)}<b>${list.length}</b></div>
+        ${shown.map(render[k]).join("") || '<div class="lane-empty">Пусто</div>'}
+        ${list.length > LIM[k] ? `<button class="lane-more" type="button" data-act="laneAll" data-k="${k}">${all[k] ? "свернуть" : "ещё " + (list.length - LIM[k])}</button>` : ""}</div>`;
+    }).join("");
+    return `<div class="pane">
+      <div class="ph"><h1>Грузы (информация)</h1><label class="search">${I("search")}<input data-in="q" value="${E(App.tmp.q)}" placeholder="Код клиента, трек, наименование"></label><span class="grow"></span><button class="btn" type="button" data-act="exportBoard" title="Выгрузить в Excel">${I("download")}<span class="hide-n">Excel</span></button></div>
+      <div class="fbar"><div class="seg light sm" data-hl="wh-filter">${[["all", "Все склады"]].concat(st.WH.map((w) => [w.id, w.ru])).map(([k, t]) => `<button type="button" class="${f === k ? "on" : ""}" data-act="whF" data-k="${k}">${t}</button>`).join("")}</div><span class="grow"></span>
+        <span class="chipb">${I("eye")}Только обзор. Работа с грузами на странице <span class="lnk" data-act="d" data-s="work">«Грузы»</span></span></div>
+      <div class="board" id="board">${lanes}</div>
+      <p class="muted mt foot">${I("info")}Нажмите на карточку: откроется большое окно с данными, историей и действиями по этапу.</p>
+    </div>`;
+  }
+
+  // ---------- «Грузы»: рабочая страница ----------
+  function csel() { App.tmp.csel = (App.tmp.csel || []).filter((id) => { const r = st.rec(id); return r && !r.taskId && !r.cargoId; }); return App.tmp.csel; }
+  function psel() { App.tmp.psel = (App.tmp.psel || []).filter((id) => { const c = st.cargo(id); return c && st.left(c) > 0; }); return App.tmp.psel; }
+  function stockGroups() {
+    const g = {}; st.waiting().filter(vis).forEach((r) => (g[r.clientId] = g[r.clientId] || []).push(r));
+    const unk = st.unknown().filter(vis); if (unk.length) g.unk = unk;
+    return g;
+  }
+  function codesHtml(g, cur) {
+    const q = (App.tmp.wq || "").trim().toUpperCase(), keys = Object.keys(g).filter((k) => k !== "unk" && (!q || / · /.test(App.tmp.wq) || k.includes(q) || cname(k).toUpperCase().includes(q))).sort((a, b) => (g[b].some((r) => r.fresh) ? 1 : 0) - (g[a].some((r) => r.fresh) ? 1 : 0) || a.localeCompare(b));
+    const row = (k, title, name) => `<button class="wc${cur === k ? " on" : ""}${k === "unk" ? " unk" : ""}${g[k].some((r) => r.fresh) ? " new" : ""}" type="button" data-act="wcode" data-c="${k}" data-wc="${k}"><span class="code">${title}</span><span class="nm">${name}</span><span class="cgn">${recsWord(g[k].length)} · ${u.places(g[k].reduce((a, r) => a + r.places, 0))}</span></button>`;
+    return (keys.map((k) => row(k, E(k), E(cname(k)))).join("") || (q ? '<p class="muted s13 p0">Такого кода на складе нет</p>' : "")) + (g.unk && (!q || / · /.test(App.tmp.wq) || "НЕИЗВЕСТНЫЙ".includes(q)) ? row("unk", "Неизвестный", "без кода клиента") : "");
+  }
+  function gcard(r, on) {
+    return `<div class="gc${on ? " on" : ""}${r.fresh ? " new" : ""}" data-gc="${r.id}">
+      ${r.photos.length ? `<button class="gc-ph" type="button" data-act="zoom" data-p="${r.photos[0]}" title="Увеличить фото" aria-label="Увеличить фото">${u.photo(r.photos[0])}${r.photos.length > 1 ? `<em>${r.photos.length} фото</em>` : ""}${r.damage ? '<i class="dmgi" title="Есть повреждение">!</i>' : ""}</button>` : `<div class="gc-ph none">${I("camera")}</div>`}
+      <button class="gc-b" type="button" data-act="cgSel" data-id="${r.id}"><span class="cb">${on ? I("check") : ""}</span>
+        <span class="gc-t"><b class="mono">${r.track ? E(r.track) : "трек не указан"}</b><small>${r.clientId ? E(r.supplier) : E(st.noteText(r) || "Маркировки нет")}</small>
+        <span class="gc-m">${u.places(r.places)} · принят ${u.dShort(r.at)} · ${E(whn(r.wh))}</span><span class="gc-m">Доставка до склада: ${E(delivText(r))}${r.extra ? ", доп. " + u.cny(r.extra) : ""}</span>
+        ${r.damage ? `<span class="gc-m bad">Повреждение: ${E(st.noteText({ note: r.damage }))}</span>` : ""}${r.lost ? '<span class="gc-m bad">Не найден при сборке</span>' : ""}</span></button>
+      <button class="x sm" type="button" data-act="openItem" data-t="rec" data-id="${r.id}" title="Открыть карточку ${E(r.id)}" aria-label="Открыть карточку">${I("chevron")}</button></div>`;
+  }
+  function workStock() {
+    const g = stockGroups(), keys = Object.keys(g), sel = csel(), asc = App.tmp.wsort === "old";
+    let cur = App.tmp.wcode; if (!g[cur]) cur = App.tmp.wcode = keys.filter((k) => k !== "unk").sort()[0] || keys[0] || null;
+    const rs = cur ? g[cur].slice().sort((a, b) => (asc ? a.at - b.at : b.at - a.at)) : [], chosen = rs.filter((r) => sel.includes(r.id)), n = chosen.length, unk = cur === "unk";
+    if (!cur) return `<div class="wk"><div class="wk-l">${ta("wq", { q: App.tmp.wq, ph: "Код или название клиента", hl: "wq" })}<div class="wk-codes" id="wkCodes"></div></div><div class="wk-r"><div class="box muted">На складе нет грузов, которые ждут упаковки.</div></div></div>`;
+    const head = `<div class="wk-h"><span class="tag code lg">${unk ? "Неизвестный" : E(cur)}</span><div class="grow"><b class="ell1">${unk ? "Грузы без кода клиента" : E(cname(cur))}</b><small data-hl="wk-sum">${recsWord(rs.length)} на складе · ${u.places(rs.reduce((a, r) => a + r.places, 0))} · самый старый лежит с ${u.dShort(Math.min(...rs.map((r) => r.at)))}</small></div>
+        <button class="btn sm" type="button" data-act="wsort" title="Сортировка по дате приёмки">${I("clock")}${asc ? "Сначала старые" : "Сначала новые"}</button><button class="btn sm" type="button" data-act="cgAll" id="btnCgAll">${n === rs.length ? "Снять все" : "Выбрать все"}</button></div>`;
+    const foot = `<div class="wk-foot" data-hl="wk-foot"><span class="wk-n">${n ? `Выбрано ${recsWord(n)}, ${u.places(chosen.reduce((a, r) => a + r.places, 0))}` : "Отметьте грузы галочками"}</span><span class="grow"></span>
+        ${unk ? (can("bind") ? `${ta("wbind", { val: App.tmp.wbind, ph: "Код или название клиента", up: true })}<button class="btn pri" type="button" data-act="wbindGo" id="btnWbind" ${n && App.tmp.wbind ? "" : "disabled"}>${I("link")}Привязать к клиенту</button>` : '<span class="muted s13">Привязывает администратор</span>')
+          : can("packcmd") ? `<button class="btn pri" type="button" data-act="orgOpen" id="btnOrg" data-hl="org-btn" ${n ? "" : "disabled"}>${I("layers")}Организовать упаковку</button>` : '<span class="muted s13">Упаковку организует администратор</span>'}</div>`;
+    return `<div class="wk"><div class="wk-l">${ta("wq", { q: App.tmp.wq, ph: "Код или название клиента", hl: "wq" })}<div class="wk-codes" id="wkCodes">${codesHtml(g, cur)}</div></div>
+      <div class="wk-r">${head}<div class="gcs">${rs.map((r) => gcard(r, sel.includes(r.id))).join("")}</div>${foot}</div></div>`;
+  }
+  function workPacking() {
+    const list = st.openTasks().filter(vis).sort((a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0) || b.at - a.at);
+    return `<table class="tbl"><thead><tr><th>Наш трек-номер</th><th>Клиент</th><th>Наименование</th><th>Грузы</th><th>Упаковка и доставка</th><th>Статус</th><th>Склад</th></tr></thead><tbody>
+      ${list.map((t) => `<tr class="click${t.fresh ? " fresh" : ""}" data-act="openItem" data-t="task" data-id="${t.id}" data-wt="${t.id}"><td><b class="mono">${E(t.id)}</b><div class="muted s12">${u.when(t.at)}</div></td><td><b>${E(t.clientId)}</b><div class="muted s12">${E(cname(t.clientId))}</div></td><td>${E(t.name) || '<span class="muted">не указано</span>'}</td><td>${recsWord(t.receiptIds.length)}<div class="muted s12">${u.places(st.taskPlaces(t))}</div></td><td>${E(plan(t.packPlan))}<div class="muted s12">${trText(t.transport)}</div></td><td>${tsPill(t)}</td><td class="muted">${E(whn(t.wh))}</td></tr>`).join("") || '<tr><td colspan="7" class="muted">Сейчас у склада нет заказов на упаковку</td></tr>'}
+    </tbody></table><p class="muted s12 mt8">Откройте заказ: видно, что собирает склад. Если склад не успевает, администратор может сам отметить найденные грузы и внести упаковку.</p>`;
+  }
+  function workPacked() {
+    const list = st.ready().filter(vis).sort((a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0) || b.at - a.at), sel = psel();
+    return `<div class="wk-bar"><span class="muted s13">Отметьте один или несколько грузов и отправьте: вид доставки, маршрут и место назначения увидит склад.</span><span class="grow"></span>${can("dispatch") ? `<button class="btn pri" type="button" data-act="sendOpen" id="btnSend" data-hl="send-btn" ${sel.length ? "" : "disabled"}>${I("send")}Отправить${sel.length ? " · " + sel.length : ""}</button>` : ""}</div>
+      <table class="tbl"><thead><tr><th></th><th>Наш трек-номер</th><th>Клиент</th><th>Наименование</th><th>Упаковка</th><th class="r">Мест</th><th class="r">Вес</th><th class="r">Объём</th><th>Упакован</th><th></th></tr></thead><tbody>
+      ${list.map((c) => { const on = sel.includes(c.id); return `<tr class="click${on ? " sel" : ""}${c.fresh ? " fresh" : ""}" data-act="pSel" data-id="${c.id}" data-wp="${c.id}"><td><span class="cb${on ? " on" : ""}">${on ? I("check") : ""}</span></td><td><b class="mono">${E(c.id)}</b></td><td><b>${E(c.clientId)}</b><div class="muted s12">${E(cname(c.clientId))}</div></td><td>${E(c.name) || '<span class="muted">не указано</span>'}</td><td>${E(st.packsText(c.packs))}</td><td class="r">${c.places}</td><td class="r">${u.kg(c.weight)}</td><td class="r">${u.vol(c.volume)}</td><td class="muted">${u.dShort(c.at)}<div class="s12">${E(whn(c.wh))}</div></td><td class="r"><button class="x sm" type="button" data-act="openItem" data-t="cargo" data-id="${c.id}" title="Открыть карточку" aria-label="Открыть карточку">${I("chevron")}</button></td></tr>`; }).join("") || '<tr><td colspan="10" class="muted">Упакованных грузов нет: как только склад упакует, груз появится здесь</td></tr>'}
+    </tbody></table>`;
+  }
+  function work() {
+    const tab = ["stock", "packing", "packed"].includes(App.tmp.wtab) ? App.tmp.wtab : "stock";
+    const n = { stock: st.waiting().filter(vis).length + st.unknown().filter(vis).length, packing: st.openTasks().filter(vis).length, packed: st.ready().filter(vis).length };
+    return `<div class="pane">
+      <div class="ph"><h1>Грузы</h1><div class="seg light" data-hl="wtabs">${[["stock", "На складе"], ["packing", "На упаковке"], ["packed", "Упакован"]].map(([k, t]) => `<button type="button" class="${tab === k ? "on" : ""}" data-act="wtab" data-k="${k}" data-wtab="${k}">${t}<b>${n[k]}</b></button>`).join("")}</div><span class="grow"></span>
+        ${can("accept") ? `<button class="btn" type="button" data-act="acceptOpen" id="btnAcceptDesk">${I("plus")}Принять груз</button>` : ""}</div>
+      ${tab === "stock" ? workStock() : tab === "packing" ? workPacking() : workPacked()}
+    </div>`;
+  }
+
+  // ---------- большая карточка груза ----------
+  function stageOf(t, o) {
+    if (t === "rec") return !o.clientId ? "unk" : o.cargoId ? "pack" : o.taskId ? "packing" : "in";
+    if (t === "task") return o.status === "done" ? "pack" : "packing";
+    if (t === "cargo") { if (st.left(o) > 0) return "pack"; const s = st.ship(o.id); return s ? s.status : "pack"; }
+    return o.status;
+  }
+  const getItem = (t, id) => (t === "rec" ? st.rec(id) : t === "task" ? st.task(id) : t === "cargo" ? st.cargo(id) : st.ship(id));
+  const KIND = { rec: "Приход", task: "Заказ на упаковку", cargo: "Груз", ship: "Отправка" };
+  const linkrow = (t, id, ic, title, sub) => `<button class="linkrow" type="button" data-act="openItem" data-t="${t}" data-id="${id}">${I(ic)}<span><b>${title}</b><small>${sub}</small></span>${I("chevron")}</button>`;
+  const photosHtml = (list) => (list.length ? `<div class="photos">${list.join("")}</div>` : `<div class="ph-none">${I("camera")}Фото не приложили</div>`);
+  const recRow = (r) => linkrow("rec", r.id, "box", (r.track ? E(r.track) : E(r.id)) + " · " + E(r.supplier), E(r.id) + " · " + u.places(r.places) + " · принят " + u.dShort(r.at) + (r.damage ? " · есть повреждение" : ""));
+  // форма упаковки за склад: найденные грузы, количество по видам, размеры, вес, фото
+  function tpDraft(t) {
+    let d = App.tmp.tp;
+    if (!d || d.id !== t.id) d = App.tmp.tp = { id: t.id, found: t.receiptIds.slice(), packs: {}, dims: [{ l: "", w: "", h: "", n: "" }], weight: "", photos: [], note: "" };
+    d.found = d.found.filter((id) => t.receiptIds.includes(id));
+    return d;
+  }
+  const dimRow = (x, i, n) => `<div class="dim" data-dim="${i}">${["l", "w", "h", "n"].map((k, j) => `<input class="inp" data-in="tpDim" data-i="${i}" data-k="${k}" inputmode="numeric" value="${E(x[k])}" placeholder="${["Длина", "Ширина", "Высота", "Мест"][j]}" aria-label="${["Длина", "Ширина", "Высота", "Мест"][j]}">${j < 3 ? '<i>×</i>' : ""}`).join("")}<button class="x sm" type="button" data-act="tpDimDel" data-i="${i}" aria-label="Убрать строку" ${n > 1 ? "" : "disabled"}>${I("x")}</button></div>`;
+  function taskForm(t) {
+    const d = tpDraft(t), rs = t.receiptIds.map(st.rec).filter(Boolean), vol = st.dimsVolume(d.dims);
+    return `<div class="box act" data-hl="tp-box"><h3>${I("layers")}Упаковать за склад</h3><p>Обычно это делает кладовщик с телефона. Если склад не успевает, внесите данные сами: процесс не должен стоять.</p>
+      ${t.status === "collect" ? `<div class="fld"><span>Найденные грузы</span><div class="tp-found">${rs.map((r) => `<button type="button" class="prow${d.found.includes(r.id) ? " on" : ""}" data-act="tpFound" data-id="${r.id}"><span class="cb">${d.found.includes(r.id) ? I("check") : ""}</span><span class="ct"><b>${r.track ? E(r.track) : E(r.id)}</b><small>${E(r.supplier)} · ${u.places(r.places)}</small></span></button>`).join("")}</div></div>` : ""}
+      <div class="fld mt8"><span>Количество по видам упаковки</span><div class="tp-packs">${st.PACK.map((k) => `<label><span>${L.t("pk_" + k)}</span><input class="inp" data-in="tpPack" data-k="${k}" inputmode="numeric" value="${E(d.packs[k] || "")}" placeholder="0"></label>`).join("")}</div></div>
+      <div class="fld mt8"><span>Размеры, см: длина × ширина × высота × мест</span><div class="dims" id="tpDims">${d.dims.map((x, i) => dimRow(x, i, d.dims.length)).join("")}</div><button class="btn sm" type="button" data-act="tpDimAdd">${I("plus")}Добавить ещё</button></div>
+      <div class="row2 mt8"><label class="fld"><span>Вес, кг</span><input class="inp" data-in="tpIn" data-k="weight" inputmode="decimal" value="${E(d.weight)}" placeholder="0"></label><div class="fld"><span>Объём считается сам</span><div class="inp ro" id="tpVol">${u.vol(vol)}</div></div></div>
+      <div class="fld mt8"><span>Фото упакованного груза</span><div class="cam sm">${d.photos.map((p) => `<div class="shot">${u.photo(p, t.packPlan[0] || "bag")}</div>`).join("")}${d.photos.length < 3 ? `<button class="add" type="button" data-act="tpPhoto">${I("camera")}<span>${d.photos.length ? "Ещё" : "Добавить"}</span></button>` : ""}</div></div>
+      <button class="btn pri lg block mt" type="button" data-act="taskPack" data-id="${t.id}" id="btnCardNext" ${d.found.length ? "" : "disabled"}>${I("check")}Упаковано</button></div>`;
+  }
+  function actionBox(t, o, stage) {
+    const nextId = 'id="btnCardNext"', adm = !asId();
+    if (stage === "unk") {
+      return `<div class="box act warn"><h3>${I("alert")}Клиент не указан</h3><p>Склад принял груз без кода клиента${st.noteText(o) ? ": " + E(st.noteText(o).toLowerCase()) : ""}. Привяжите груз к клиенту, и он появится в его списке на складе.</p>
+        ${can("bind") ? `${ta("bind", { val: App.tmp.bind, ph: "Начните вводить код или название", flow: true })}<button class="btn pri block mt8" type="button" data-act="bindGo" data-id="${o.id}" ${nextId} ${App.tmp.bind ? "" : "disabled"}>${I("link")}Привязать к клиенту</button>` : '<p class="muted s13 p0">Привязывает администратор или сотрудник с доступом.</p>'}
+        ${adm ? `<button class="btn ghost block mt8" type="button" data-act="recDel" data-id="${o.id}">${I("x")}Удалить приход</button>` : ""}</div>`;
+    }
+    if (t === "rec" && stage === "in") {
+      const n = st.waiting(o.wh).filter((r) => r.clientId === o.clientId).length;
+      return `<div class="box act"><h3>${I("layers")}Следующий шаг: организовать упаковку</h3><p>У клиента на складе ${E(whn(o.wh))} ${n > 1 ? recsWord(n) + ": можно упаковать вместе" : "один груз"}. В этот момент грузу присваивается наш трек-номер, склад получает задачу.</p>
+        ${can("packcmd") ? `<button class="btn pri lg block" type="button" data-act="orgOne" data-id="${o.id}" ${nextId}>${I("layers")}Организовать упаковку</button>` : '<p class="muted s13 p0">Упаковку организует администратор или сотрудник с доступом.</p>'}
+        ${adm ? `<button class="btn ghost block mt8" type="button" data-act="recDel" data-id="${o.id}">${I("x")}Удалить приход</button>` : ""}</div>`;
+    }
+    if (t === "rec") return `<div class="box act"><h3>${I("layers")}${stage === "packing" ? "В заказе на упаковку" : "Упакован"}</h3>${linkrow(o.cargoId ? "cargo" : "task", o.cargoId || o.taskId, "box", E(o.cargoId || o.taskId), o.cargoId ? "приход вошёл в этот груз" : "склад собирает и упаковывает")}</div>`;
+    if (t === "task" && stage === "packing") {
+      return `<div class="box act"><h3>${I("bell")}${o.status === "collect" ? "Сборка: склад ищет грузы" : "Упаковка: склад пакует"}</h3><p class="p0">Задача у кладовщика: ${E(st.who(st.WH_STAFF[o.wh]))}, склад ${E(whn(o.wh))}. ${o.status === "collect" ? "Он отметит найденные грузы и передаст их на упаковку." : "Грузы собраны " + u.when(o.collectedAt) + ", осталось упаковать и внести размеры."}</p>
+        ${adm ? `<button class="btn ghost block mt8" type="button" data-act="taskCancel" data-id="${o.id}">${I("x")}Отменить заказ на упаковку</button>` : ""}</div>${can("packcmd") ? taskForm(o) : ""}`;
+    }
+    if (t === "task") return `<div class="box act"><h3>${I("check")}Упаковано</h3>${linkrow("cargo", o.id, "box", "Груз " + E(o.id), "упакован " + u.dShort(o.doneAt) + " · " + E(st.who(o.doneBy)))}</div>`;
+    if (t === "cargo" && stage === "pack") {
+      return `<div class="box act"><h3>${I("send")}Следующий шаг: отправка</h3><p>Груз упакован и ждёт отправки. Укажите вид доставки, маршрут и место назначения: их увидит склад, клиент получит уведомление.</p>
+        ${can("dispatch") ? `<button class="btn pri lg block" type="button" data-act="sendOne" data-id="${o.id}" ${nextId}>${I("send")}Отправить</button>` : '<p class="muted s13 p0">Отправляет администратор или сотрудник с доступом.</p>'}</div>`;
+    }
+    if (t === "cargo") { const s = st.ship(o.id); return `<div class="box act"><h3>${I("truck")}Отправлен</h3>${s ? linkrow("ship", s.id, "truck", "Отправка " + E(s.id), "маршрут " + E(s.route) + " · " + E(s.dest) + " · " + L.t("st_" + s.status).toLowerCase()) : ""}</div>`; }
+    const editB = can("dispatch") ? `<button class="btn block mt8" type="button" data-act="shipEdit" data-id="${o.id}">${I("edit")}Исправить данные отправки</button>` : "";
+    if (stage === "way") return `<div class="box act"><h3>${I("truck")}В пути</h3><p>Маршрут ${E(o.route)}, ${E(o.dest)}. Прибытие около ${u.dLong(o.eta)}. Когда груз придёт, отметьте прибытие: клиент получит уведомление.</p>
+      ${can("arrive") ? `<button class="btn pri lg block" type="button" data-act="arrive" data-id="${o.id}" data-arr="${o.id}" ${nextId}>${I("pin")}Прибыл в Россию</button>` : '<p class="muted s13 p0">Прибытие отмечает администратор или сотрудник с доступом.</p>'}${editB}</div>`;
+    if (stage === "arrived") {
+      if (!can("issue")) return `<div class="box act"><h3>${I("pin")}Ждёт выдачи</h3><p class="p0">Выдачу отмечает администратор или сотрудник с доступом.</p></div>`;
+      const d = App.tmp.issue && App.tmp.issue.id === o.id ? App.tmp.issue : (App.tmp.issue = { id: o.id, type: "client", tk: st.TK[0], waybill: "" });
+      return `<div class="box act" data-hl="iss-box"><h3>${I("check")}Выдача</h3>
+        <div class="choice cols2" data-hl="iss-type"><button type="button" class="${d.type === "client" ? "on" : ""}" data-act="issType" data-k="client"><span>Выдать клиенту<small>забирает сам</small></span></button><button type="button" class="${d.type === "tk" ? "on" : ""}" data-act="issType" data-k="tk"><span>Передать в ТК<small>с номером накладной</small></span></button></div>
+        ${d.type === "tk" ? `<div class="choice cols3 mt8">${st.TK.map((k) => `<button type="button" class="${d.tk === k ? "on" : ""}" data-act="issTk" data-k="${k}">${k}</button>`).join("")}</div><label class="fld mt8"><span>Номер накладной</span><input class="inp" data-in="issWb" value="${E(d.waybill)}" placeholder="с квитанции ТК" autocomplete="off" data-enter="#btnCardNext"></label>` : ""}
+        ${seeMoney() && !st.isPaid(o) ? '<div class="note warn mt8">Груз не оплачен. Решите, можно ли выдавать.</div>' : ""}
+        <button class="btn pri lg block mt" type="button" data-act="issGo" data-id="${o.id}" ${nextId}>${I(d.type === "tk" ? "truck" : "check")}${d.type === "tk" ? "Передать в ТК" : "Подтвердить выдачу"}</button></div>`;
+    }
+    return `<div class="box act"><h3>${I("check")}${o.issue && o.issue.type === "tk" ? "Передан в транспортную компанию" : "Выдан клиенту"}</h3><p class="p0">${o.issue && o.issue.type === "tk" ? E(o.issue.tk) + ", накладная " + E(o.issue.waybill) + ". " : ""}${u.dLong(o.doneAt)} · ${E(st.who(o.doneBy))}</p></div>`;
+  }
+  const DOCS = ["Упаковочный лист", "Инвойс", "Накладная"];
+  function cardHtml(t, id) {
+    const o = getItem(t, id); if (!o || (o.clientId && !vis(o)) || (!o.clientId && !vis(o))) return "";
+    const stage = stageOf(t, o), c = o.clientId ? st.client(o.clientId) : null, idx = STAGES.indexOf(stage), cg = t === "ship" ? st.cargo(o.id) : null, wid = cg ? cg.wh : o.wh;
+    const steps = STAGES.map((k, i) => `<li class="${idx < 0 ? "todo" : i < idx || stage === "done" ? "done" : i === idx ? "cur" : "todo"}"><i>${i < idx || stage === "done" ? I("check") : i + 1}</i><span>${L.t("st_" + k)}</span></li>`).join("");
+    const chain = st.chainIds(t, o), log = st.S.log.filter((e) => e.ids.some((x) => chain.includes(x)));
+    const NEXT_T = { in: "Организовать упаковку", packing: "Сборка и упаковка на складе", pack: "Отправка", way: "Прибытие в Россию", arrived: "Выдача или передача в ТК", unk: "Привязать к клиенту" };
+    const tl = log.map((e, i) => `<li class="${i === log.length - 1 && stage !== "done" ? "cur" : "done"}"><b>${E(e.t)}</b><small>${u.dShort(e.at)} · ${u.hm(e.at)} · ${E(st.who(e.by))}</small></li>`).join("") + (NEXT_T[stage] ? `<li class="todo"><b>${NEXT_T[stage]}</b></li>` : "");
+    let left = "";
+    if (t === "rec") {
+      left = photosHtml(o.photos.map((p, i) => `<div class="ph-i">${u.photo(p)}<em>приёмка ${i + 1}</em></div>`).concat((o.dmgPhotos || []).map((p) => `<div class="ph-i dmg">${u.photo(p)}<em>повреждение</em></div>`)))
+        + `<dl class="kv"><dt>Склад</dt><dd>${E(whn(o.wh))}</dd><dt>Китайский трек-номер</dt><dd>${o.track ? E(o.track) : '<span class="muted">не указан</span>'}</dd>${c ? `<dt>Поставщик</dt><dd>${E(o.supplier)}</dd>` : ""}${o.what ? `<dt>Что внутри</dt><dd>${E(o.what)}</dd>` : ""}
+          <dt>Количество мест</dt><dd>${u.places(o.places)}</dd><dt>Повреждение</dt><dd>${o.damage ? `<span class="bad">${E(st.noteText({ note: o.damage }))}</span>` : "нет"}</dd><dt>Доставка до склада</dt><dd>${E(delivText(o))}</dd><dt>Доп. расходы</dt><dd>${o.extra ? u.cny(o.extra) : "нет"}</dd>
+          <dt>Примечание</dt><dd>${st.noteText(o) ? E(st.noteText(o)) : '<span class="muted">нет</span>'}</dd><dt>Принял</dt><dd>${E(st.who(o.by))}, ${u.when(o.at)}</dd></dl>`
+        + ((o.deliv || o.extra) && seeMoney() ? `<div class="note">${I("yuan")}Расходы в Китае ${u.cny((o.deliv || 0) + (o.extra || 0))}: ${o.charged ? "уже включены в стоимость груза" : "добавятся к стоимости при отправке, клиент увидит сумму в кабинете"}.</div>` : "")
+        + (o.lost ? '<div class="note warn">Склад не нашёл этот груз при сборке заказа. Он остался на складе, запись есть в истории.</div>' : "");
+    } else if (t === "task") {
+      left = `<dl class="kv"><dt>Наш трек-номер</dt><dd><b class="mono">${E(o.id)}</b></dd><dt>Склад</dt><dd>${E(whn(o.wh))}, ${E(st.who(st.WH_STAFF[o.wh]))}</dd><dt>Наименование</dt><dd>${E(o.name) || '<span class="muted">не указано</span>'}</dd><dt>Заказанная упаковка</dt><dd>${E(plan(o.packPlan))}</dd><dt>Вид доставки</dt><dd>${trText(o.transport)}</dd>
+          <dt>Примечание</dt><dd>${o.note ? E(o.note) : '<span class="muted">нет</span>'}</dd><dt>Дата</dt><dd>${u.dLong(o.date)}</dd><dt>Команду дал</dt><dd>${E(st.who(o.by))}, ${u.when(o.at)}</dd></dl>
+        <div><h3 class="h3">Грузы в заказе: ${recsWord(o.receiptIds.length)}, ${u.places(st.taskPlaces(o))}</h3>${o.receiptIds.map(st.rec).filter(Boolean).map(recRow).join("")}</div>`;
+    } else if (t === "cargo") {
+      const recs = o.receiptIds.map(st.rec).filter(Boolean);
+      left = photosHtml(o.photos.map((p) => `<div class="ph-i">${u.photo(p, o.packType)}<em>упаковка</em></div>`).concat(recs.filter((r) => r.photos.length).slice(0, 2).map((r) => `<div class="ph-i">${u.photo(r.photos[0])}<em>приёмка</em></div>`)))
+        + `<dl class="kv"><dt>Наш трек-номер</dt><dd><b class="mono">${E(o.id)}</b></dd><dt>Наименование</dt><dd>${E(o.name) || '<span class="muted">не указано</span>'}</dd><dt>Упаковка</dt><dd>${E(st.packsText(o.packs))}</dd><dt>Мест</dt><dd>${u.places(o.places)}</dd><dt>Вес и объём</dt><dd>${u.kg(o.weight)} · ${u.vol(o.volume)}${o.volume ? " · " + Math.round(o.weight / o.volume) + " кг/м³" : ""}</dd>
+          <dt>Размеры, см</dt><dd>${o.dims.map((x) => `${x.l} × ${x.w} × ${x.h}, ${u.places(x.n)}`).join("<br>") || '<span class="muted">не указаны</span>'}</dd><dt>Склад</dt><dd>${E(whn(o.wh))}, упаковал ${E(st.who(o.by))} ${u.dShort(o.at)}</dd>${o.note ? `<dt>Примечание</dt><dd>${E(o.note)}</dd>` : ""}</dl>
+${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано иначе: заказано ${E(plan(o.packPlan))}, фактически ${E(st.packsText(o.packs))}. Запись есть в истории действий.</div>` : ""}
+        <div><h3 class="h3">Из чего собран груз</h3>${recs.map(recRow).join("")}</div>`;
+    } else {
+      const x = st.totals(o), has = (n) => o.docs.some((d) => d.name.indexOf(n) === 0), edit = can("dispatch");
+      left = `<dl class="kv"><dt>Наш трек-номер</dt><dd><b class="mono">${E(o.id)}</b></dd><dt>Вид доставки</dt><dd>${E(TR(o.transport).label)}</dd><dt>Маршрут</dt><dd><b>${E(o.route)}</b></dd><dt>Место назначения</dt><dd>${E(o.dest)}</dd><dt>Отправлен</dt><dd>${u.dLong(o.sentAt)}</dd><dt>${o.status === "way" ? "Прибытие" : "Прибыл"}</dt><dd>${o.status === "way" ? "около " + u.dLong(o.eta) : u.dLong(o.arrivedAt)}</dd>
+          <dt>Мест</dt><dd>${u.places(x.places)}</dd><dt>Вес и объём</dt><dd>${u.kg(x.weight)} · ${u.vol(x.volume)}</dd></dl>
+        ${cg ? `<div><h3 class="h3">Груз</h3>${linkrow("cargo", cg.id, "layers", E(cg.name || cg.id), E(st.packsText(cg.packs)) + " · склад " + E(whn(cg.wh)))}</div>` : ""}
+        <div><h3 class="h3">Документы</h3>${o.docs.map((d) => `<div class="docrow">${I("file")}<span><b>${E(d.name)}</b><small>${u.dShort(d.at)} · ${E(st.who(d.by))}</small></span><button class="btn sm" type="button" data-act="toast" data-t="В рабочей версии файл скачается: ${E(d.name)}" data-i="download">Скачать</button></div>`).join("") || '<p class="muted small0">Документов пока нет.</p>'}
+          ${edit ? `<div class="row wrap attach"><span class="muted">Прикрепить:</span>${DOCS.filter((n) => !has(n)).map((n) => `<button class="btn sm" type="button" data-act="addDoc" data-id="${o.id}" data-n="${n}">${I("plus")}${n}</button>`).join("") || '<span class="muted">все документы на месте</span>'}${optBtn("invoice", "Автоматическая накладная")}</div>` : ""}</div>`;
+    }
+    const moneyBox = t === "ship" && seeMoney() ? `<div class="box flat"><div class="row"><div class="grow"><small class="muted">Стоимость, $</small><div class="big">${u.usd(o.cost)}</div></div>${paidPill(o)}<button class="sw${st.isPaid(o) ? " on" : ""}" type="button" data-act="togglePaid" data-id="${o.id}" aria-label="Оплачено" title="Отметка «Оплачено»"><i></i></button></div>
+        ${o.doorUsd ? `<div class="pline mini"><span>В том числе доставка до склада и доп. расходы в Китае</span><b>${u.cny(o.doorCny)} = ${u.usd(o.doorUsd)}</b></div>` : ""}
+        ${sec("money") ? `<div class="pline mini"><span>${stg(2)} Расходы ${u.usd(st.expSum(o))}, прибыль <b class="${o.cost - st.expSum(o) >= 0 ? "ok" : "bad"}">${u.usd(o.cost - st.expSum(o))}</b></span><span class="lnk" data-act="d" data-s="profit">Подробнее</span></div>` : ""}</div>` : "";
+    const chatB = sec("chat") && (t === "rec" || t === "cargo") ? `<button class="btn" type="button" data-act="chatOpen" data-t="${t}" data-id="${o.id}">${I("lang")}Написать складу${stg(3)}</button>` : "";
+    return `<div class="cx" data-card="${t}:${E(id)}">
+      <div class="cx-h"><div class="cx-t"><small>${KIND[t]}${wid ? " · склад " + E(whn(wid)) : ""}</small><h2>${E(o.id)}</h2></div>${pill(stage, true)}
+        ${c ? `<div class="cx-c"><span class="tag code">${E(c.id)}</span>${allowed("clients") ? `<span class="lnk ell1" data-act="d" data-s="client" data-p="${c.id}">${E(c.name)}</span>` : `<b class="ell1">${E(c.name)}</b>`}</div>` : '<div class="cx-c"><span class="tag">клиент не указан</span></div>'}
+        <span class="grow"></span>${xBtn}</div>
+      <ol class="cx-s">${steps}</ol>
+      <div class="cx-b"><div class="cx-l">${left}</div>
+        <div class="cx-r">${actionBox(t, o, stage)}${moneyBox}<div class="box"><h3>${I("history")}История груза</h3><ol class="tl">${tl}</ol></div>${chatB ? `<div class="row wrap">${chatB}</div>` : ""}</div></div></div>`;
+  }
+  // окно: открыть с анимацией или обновить на месте, если уже открыто такое же
+  function setModal(html) {
+    const m = $("modal"), a = document.activeElement, k = a && m.contains(a) && a.dataset && a.dataset.in ? a : null, key = k ? `[data-in="${k.dataset.in}"]${k.dataset.k ? `[data-k="${k.dataset.k}"]` : ""}${k.dataset.i ? `[data-i="${k.dataset.i}"]` : ""}` : "", pos = k ? k.selectionStart : 0, b = m.querySelector(".cx-b"), top = b ? b.scrollTop : m.scrollTop;
+    m.innerHTML = html;
+    const b2 = m.querySelector(".cx-b"); if (b2) b2.scrollTop = top; else m.scrollTop = top;
+    if (key) { const n = m.querySelector(key); if (n) { n.focus({ preventScroll: true }); try { n.setSelectionRange(pos, pos); } catch (e) { /* не текстовое поле */ } } }
+    if (App.scenario) App.scenario.decorate();
+  }
+  function show(kind, html, size) { if (App.modalOpen() && App.tmp.mk === kind) setModal(html); else { App.modal(html, size); App.tmp.mk = kind; } }
+  function openItem(t, id) {
+    const o = getItem(t, id); if (!o) return;
+    const cur = App.tmp.card;
+    if (!cur || cur.t !== t || cur.id !== id) App.tmp.bind = null;
+    App.tmp.card = { t, id };
+    const h = cardHtml(t, id); if (!h) return;
+    show("card", h, "xl");
+    if (o.fresh && !(App.scenario && App.scenario.on())) { o.fresh = false; st.save(); }
+    if (App.scenario) App.scenario.check("openItem", t + ":" + id);
+  }
+  const redrawCard = () => { const c = App.tmp.card; if (c && App.modalOpen() && App.tmp.mk === "card") { const h = cardHtml(c.t, c.id); if (h) setModal(h); else App.closeDesk(); } };
+  // номер TT общий у заказа, груза и отправки: открываем самую позднюю стадию
+  const openById = (id) => { if (id.indexOf("TT-") === 0) { const t = st.ship(id) ? "ship" : st.cargo(id) ? "cargo" : st.task(id) ? "task" : null; if (t) openItem(t, id); } else if (st.rec(id)) openItem("rec", id); };
+  const confirmBox = (title, text, act, id, btn) => App.overlay(`<span class="opt">${I("alert")}<span class="ol">Подтверждение</span></span><h2>${title}</h2><p>${text}</p><div class="of"><button class="btn pri lg" type="button" data-act="${act}" data-id="${E(id)}" id="btnConfirm">${btn}</button><button class="btn lg" type="button" data-act="closeAny">Отмена</button></div>`);
+
+  // ---------- окно «Организовать упаковку» ----------
+  function orgOpen(ids, from) {
+    const rs = ids.map(st.rec).filter((r) => r && r.clientId && !r.taskId && !r.cargoId); if (!rs.length) return;
+    const f = rs[0], list = rs.filter((r) => r.clientId === f.clientId && r.wh === f.wh);
+    App.tmp.org = { clientId: f.clientId, wh: f.wh, ids: list.map((r) => r.id), name: [...new Set(list.map((r) => r.what).filter(Boolean))].join(", ").slice(0, 60), packPlan: [], transport: "", note: "", date: dISO(Date.now()), from: from || null };
+    orgModal();
+  }
+  function orgModal() {
+    const d = App.tmp.org; if (!d) return;
+    const c = st.client(d.clientId), rs = d.ids.map(st.rec).filter(Boolean);
+    show("org", `<div class="mh"><div class="mi">${I("layers")}</div><div><h2>Организовать упаковку</h2><div class="muted s13">Команда складу ${E(whn(d.wh))}: ${E(st.who(st.WH_STAFF[d.wh]))} получит задачу</div></div>${xBtn}</div>
+      <div class="org-top"><div class="tt-box" data-hl="org-tt"><small>Наш трек-номер, присваивается сам</small><b class="mono" id="orgTT">${E(st.nextTT(d.clientId))}</b></div><div class="tt-box plain"><small>Код клиента</small><b>${E(c.id)}</b><span class="muted s12 ell1">${E(c.name)}</span></div></div>
+      <div class="fld mt"><span>Китайские треки из отмеченных карточек: ${recsWord(rs.length)}, ${u.places(rs.reduce((a, r) => a + r.places, 0))}</span><div class="chips">${rs.map((r) => `<span class="chipx"><b class="mono">${r.track ? E(r.track) : E(r.id)}</b><small>${u.places(r.places)}</small><button type="button" data-act="orgDrop" data-id="${r.id}" aria-label="Убрать из заказа" ${rs.length > 1 ? "" : "disabled"}>${I("x")}</button></span>`).join("")}</div></div>
+      <label class="fld mt"><span>Наименование</span><input class="inp" data-in="orgIn" data-k="name" value="${E(d.name)}" placeholder="Например: светильники и посуда" autocomplete="off"></label>
+      <div class="fld mt"><span>Вид упаковки</span><div class="choice cols4" data-hl="org-pack">${st.PACK.map((k) => `<button type="button" class="${d.packPlan.includes(k) ? "on" : ""}" data-act="orgPack" data-k="${k}">${L.t("pk_" + k)}</button>`).join("")}</div></div>
+      <div class="fld mt"><span>Вид доставки, если уже понятно</span><div class="choice cols4">${Object.keys(st.TRANSPORT).map((k) => `<button type="button" class="${k === d.transport ? "on" : ""}" data-act="orgTr" data-k="${k}">${I(TR(k).ic)}${TR(k).t}</button>`).join("")}<button type="button" class="${d.transport ? "" : "on"}" data-act="orgTr" data-k="">Пока не ясно</button></div></div>
+      <div class="row2 mt"><label class="fld"><span>Примечание</span><input class="inp" data-in="orgIn" data-k="note" value="${E(d.note)}" placeholder="Например: хрупкое, проложить пенопластом" autocomplete="off"></label><label class="fld"><span>Дата</span><input class="inp" type="date" data-in="orgIn" data-k="date" value="${E(d.date)}"></label></div>
+      <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="orgGo" id="btnOrgGo">${I("check")}Готово</button></div>`, "wide");
+  }
+  // ---------- окно «Отправить» и исправление отправки ----------
+  function sendOpen(ids) {
+    const cs = ids.map(st.cargo).filter((c) => c && st.left(c) > 0); if (!cs.length) return;
+    const tr = cs.map((c) => c.transport).find((x) => st.TRANSPORT[x]) || "auto", cl = st.client(cs[0].clientId);
+    App.tmp.snd = { ids: cs.map((c) => c.id), transport: tr, route: st.ROUTES[0], dest: cs.every((c) => c.clientId === cs[0].clientId) && st.DEST.includes(cl.city) ? cl.city : st.DEST[0], date: dISO(Date.now()), picked: false };
+    sendModal();
+  }
+  const shipFields = (d, p) => `<div class="fld"><span>Вид доставки</span><div class="choice cols3">${Object.keys(st.TRANSPORT).map((k) => `<button type="button" class="${k === d.transport ? "on" : ""}" data-act="${p}Tr" data-k="${k}">${I(TR(k).ic)}<span>${TR(k).t}<small>${TR(k).label.split(", ")[1]}</small></span></button>`).join("")}</div></div>
+      <div class="fld mt"><span>Маршрут</span><div class="choice cols4" data-hl="${p}-route">${st.ROUTES.map((k) => `<button type="button" class="${k === d.route ? "on" : ""}" data-act="${p}Route" data-k="${k}">${k}</button>`).join("")}</div></div>
+      <div class="row2 mt"><label class="fld"><span>Место назначения</span><select class="inp" data-chg="${p}Dest">${[...new Set(st.DEST.concat(d.dest))].map((x) => `<option${x === d.dest ? " selected" : ""}>${E(x)}</option>`).join("")}</select></label><label class="fld"><span>Дата отправки</span><input class="inp" type="date" data-in="${p}In" data-k="date" value="${E(d.date)}"></label></div>`;
+  function sendModal() {
+    const d = App.tmp.snd; if (!d) return;
+    const cs = d.ids.map(st.cargo).filter(Boolean);
+    show("send", `<div class="mh"><div class="mi">${I("send")}</div><div><h2>Отправить</h2><div class="muted s13">${recsWord(cs.length)}, ${u.places(cs.reduce((a, c) => a + c.places, 0))}, ${u.kg(cs.reduce((a, c) => a + c.weight, 0))}</div></div>${xBtn}</div>
+      <div class="fld"><span>Наши трек-номера</span><div class="chips">${cs.map((c) => `<span class="chipx"><b class="mono">${E(c.id)}</b><small>${E(c.clientId)} · ${u.places(c.places)}</small><button type="button" data-act="sndDrop" data-id="${c.id}" aria-label="Убрать из отправки" ${cs.length > 1 ? "" : "disabled"}>${I("x")}</button></span>`).join("")}</div></div>
+      <div class="mt">${shipFields(d, "snd")}</div>
+      <div class="found mt">${I("bell")}<span>Склад увидит маршрут и место назначения у этих грузов<small>клиент получит уведомление: трек-номер, маршрут, дата прибытия и стоимость</small></span></div>
+      <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="sndGo" id="btnSendGo">${I("send")}Отправить</button></div>`, "wide");
+  }
+  function shipEditModal() {
+    const d = App.tmp.sed, s = d && st.ship(d.id); if (!s) return;
+    show("sed", `<div class="mh"><div class="mi">${I("edit")}</div><div><h2>Исправить данные отправки</h2><div class="muted s13"><span class="mono">${E(s.id)}</span> · ${E(s.clientId)} ${E(cname(s.clientId))}. Изменение попадёт в историю действий.</div></div>${xBtn}</div>
+      ${shipFields(d, "sed")}
+      ${seeMoney() ? `<label class="fld mt"><span>Стоимость, $</span><input class="inp" data-in="sedIn" data-k="cost" inputmode="numeric" value="${E(d.cost)}" data-enter="#btnSedGo"></label>` : ""}
+      <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="sedGo" id="btnSedGo">${I("check")}Сохранить</button></div>`, "wide");
+  }
+
+  // ---------- приёмка с компьютера (та же форма, что у склада) ----------
+  let photoSeq = 700;
+  function dacc() { if (!App.tmp.dacc) App.tmp.dacc = { wh: App.tmp.whF !== "all" ? App.tmp.whF : "yiwu", track: "", clientId: null, auto: false, supplier: "", what: "", expId: null, expAt: null, photos: [], places: 1, dmg: null, dmgText: "", dmgPhotos: [], dpay: null, deliv: "", extra: "", note: "" }; return App.tmp.dacc; }
+  function acceptModal() {
+    const d = dacc();
+    show("accept", `<div class="mh"><div class="mi">${I("plus")}</div><div><h2>Принять груз</h2><div class="muted s13">Та же форма, что у склада на телефоне. Ни одно поле не обязательно.</div></div>${xBtn}</div>
+      <div class="fld"><span>Склад</span><div class="choice cols4">${st.WH.map((w) => `<button type="button" class="${w.id === d.wh ? "on" : ""}" data-act="daWh" data-k="${w.id}">${E(w.ru)}</button>`).join("")}</div></div>
+      <div class="row2 mt"><div class="fld"><span>Код клиента${d.auto ? ' <em class="ok">нашёлся по треку</em>' : ""}</span>${ta("dacc", { val: d.clientId, ph: "Начните вводить код или название", hl: "ta-dacc" })}</div>
+        <label class="fld"><span>Китайский трек-номер</span><input class="inp" data-in="daTrack" value="${E(d.track)}" placeholder="с наклейки на коробке" autocomplete="off" spellcheck="false"></label></div>
+      <div class="row2 mt"><div class="fld"><span>Количество мест</span><div class="stepper"><button type="button" data-act="daPlaces" data-d="-1" aria-label="Меньше">${I("minus")}</button><input class="inp" data-in="daIn" data-k="places" inputmode="numeric" value="${E(d.places)}"><button type="button" data-act="daPlaces" data-d="1" aria-label="Больше">${I("plus")}</button></div></div>
+        <div class="fld"><span>Фото груза</span><div class="cam sm">${d.photos.map((p) => `<div class="shot">${u.photo(p)}</div>`).join("")}${d.photos.length < 3 ? `<button class="add" type="button" data-act="daPhoto">${I("camera")}<span>${d.photos.length ? "Ещё" : "Добавить"}</span></button>` : ""}</div></div></div>
+      <div class="row2 mt"><div class="fld"><span>Повреждение</span><div class="choice cols2"><button type="button" class="${d.dmg === "no" ? "on" : ""}" data-act="daDmg" data-k="no">Нет</button><button type="button" class="${d.dmg === "yes" ? "on" : ""}" data-act="daDmg" data-k="yes">Есть</button></div>${d.dmg === "yes" ? `<input class="inp mt8" data-in="daIn" data-k="dmgText" value="${E(d.dmgText)}" placeholder="Что повреждено"><div class="cam sm mt8">${d.dmgPhotos.map((p) => `<div class="shot">${u.photo(p)}</div>`).join("")}${d.dmgPhotos.length < 2 ? `<button class="add" type="button" data-act="daDmgPhoto">${I("camera")}<span>Фото</span></button>` : ""}</div>` : ""}</div>
+        <div class="fld"><span>Доставка до склада</span><div class="choice cols2"><button type="button" class="${d.dpay === "supplier" ? "on" : ""}" data-act="daDoor" data-k="supplier">Оплатил поставщик</button><button type="button" class="${d.dpay === "wh" ? "on" : ""}" data-act="daDoor" data-k="wh">Оплатили мы</button></div>${d.dpay === "wh" ? `<input class="inp mt8" data-in="daIn" data-k="deliv" inputmode="numeric" value="${E(d.deliv)}" placeholder="Сумма, ¥">` : ""}</div></div>
+      <div class="row2 mt"><label class="fld"><span>Доп. расходы, ¥</span><input class="inp" data-in="daIn" data-k="extra" inputmode="numeric" value="${E(d.extra)}" placeholder="0"></label><label class="fld"><span>Примечание</span><input class="inp" data-in="daIn" data-k="note" value="${E(d.note)}" placeholder="Всё, что важно знать о грузе" autocomplete="off"></label></div>
+      <div class="note mt">${d.clientId ? "Клиент сразу получит уведомление, груз появится в его списке на складе." : "Без кода клиента груз уйдёт в «Неизвестные»: привязать его к клиенту можно позже."}</div>
+      <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="daGo" id="btnDaGo">${I("check")}Принять</button></div>`, "wide");
+  }
+  function daMatch() { const d = dacc(), e = st.expectedByTrack(d.track); if (e && !d.expId) { d.expId = e.id; d.expAt = e.at; d.clientId = e.clientId; d.auto = true; d.supplier = e.supplier; d.what = e.what; return true; } if (!e && d.expId) { d.expId = null; d.expAt = null; d.auto = false; d.supplier = ""; d.what = ""; return true; } return false; }
+
+  // ---------- клиенты ----------
+  function clients() {
+    const S = st.S, q = App.tmp.clientsQ.trim().toUpperCase(), m = seeMoney();
+    const rows = S.clients.filter((c) => mine(c.id) && (!q || c.id.includes(q) || c.name.toUpperCase().includes(q) || c.city.toUpperCase().includes(q))).map((c) => {
+      const a = st.waiting().filter((r) => r.clientId === c.id).length + st.openTasks().filter((x) => x.clientId === c.id).length + st.ready().filter((x) => x.clientId === c.id).length + S.ships.filter((s) => s.clientId === c.id && s.status !== "done").length;
+      const d = st.money(c.id).debt, e = S.expected.filter((x) => x.clientId === c.id).length;
+      return `<tr class="click" data-act="d" data-s="client" data-p="${c.id}"><td class="code">${E(c.id)}</td><td><b>${E(c.name)}</b><div class="muted s12">${E(c.person)}</div></td><td class="muted">${E(c.city)}</td><td class="r">${a}</td><td class="r">${e}</td>${m ? `<td class="r ${d > 0.5 ? "bad" : "ok"}">${d > 0.5 ? u.usd(d) : "нет"}</td>` : ""}</tr>`;
+    }).join("");
+    return `<div class="pane">
+      <div class="ph"><div><h1>Клиенты</h1><div class="sub">${acc() && acc().scope === "sel" ? "Сотрудник видит только клиентов, которых ему открыл администратор." : "У каждого клиента постоянный код: буква и три цифры. Его пишут на каждой коробке."}</div></div><span class="grow"></span>${asId() ? "" : `<button class="btn pri" type="button" data-act="toast" data-t="В рабочей версии откроется карточка нового клиента" data-i="info">${I("plus")}Клиент</button>`}</div>
+      <label class="search wide">${I("search")}<input data-in="clientsQ" value="${E(App.tmp.clientsQ)}" placeholder="Код, название или город"></label>
+      <table class="tbl"><thead><tr><th>Код</th><th>Клиент</th><th>Город</th><th class="r">Активные грузы</th><th class="r">Ждёт посылок</th>${m ? '<th class="r">Не оплачено</th>' : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${m ? 6 : 5}" class="muted">Никого не нашли</td></tr>`}</tbody></table>
+    </div>`;
+  }
+  function client(id) {
+    const c = st.client(id); if (!c || !mine(c.id)) return clients();
+    const S = st.S, m = seeMoney(), mm = st.money(c.id);
+    const rows = S.ships.filter((s) => s.clientId === c.id && vis(s)).map((s) => ({ t: "ship", id: s.id, at: s.sentAt, st: s.status, d: u.places(st.totals(s).places) + " · маршрут " + s.route + ", " + s.dest, cost: s }))
+      .concat(st.ready().filter((x) => x.clientId === c.id && vis(x)).map((x) => ({ t: "cargo", id: x.id, at: x.at, st: "pack", d: st.packsText(x.packs) + " · " + u.kg(x.weight) })))
+      .concat(st.openTasks().filter((x) => x.clientId === c.id && vis(x)).map((x) => ({ t: "task", id: x.id, at: x.at, st: "packing", d: recsWord(x.receiptIds.length) + " · " + (x.status === "collect" ? "сборка" : "упаковка") })))
+      .concat(st.waiting().filter((x) => x.clientId === c.id && vis(x)).map((x) => ({ t: "rec", id: x.id, at: x.at, st: "in", d: x.supplier + " · " + u.places(x.places) })))
+      .sort((a, b) => (a.st === "done" ? 1 : 0) - (b.st === "done" ? 1 : 0) || b.at - a.at);
+    const exp = S.expected.filter((e) => e.clientId === c.id), nWh = rows.filter((x) => x.t !== "ship").length;
+    const seers = Object.keys(S.staff).filter((k) => S.staff[k].kind === "office" && (S.access[k].sec.cargo || S.access[k].sec.clients) && (S.access[k].scope !== "sel" || S.access[k].clients.includes(c.id)));
+    return `<div class="pane">
+      <div class="pback" data-act="d" data-s="clients">${I("back")}Клиенты</div>
+      <div class="ph"><span class="tag code lg">${E(c.id)}</span><div><h1>${E(c.name)}</h1><div class="sub">${E(c.city)} · ${E(c.person)} · ${E(c.phone)} · клиент с ${E(c.since)} года</div></div></div>
+      <div class="kpis">
+        <div class="kpi"><span>На складах в Китае</span><strong>${nWh}</strong><small>приходы, заказы на упаковку, упакованные</small></div>
+        <div class="kpi"><span>В пути и на выдаче</span><strong>${S.ships.filter((s) => s.clientId === c.id && s.status !== "done").length}</strong><small>грузы с нашим трек-номером</small></div>
+        <div class="kpi"><span>Ждёт посылок</span><strong>${exp.length}</strong><small>трек-номера внесены заранее</small></div>
+        ${m ? `<div class="kpi ${mm.debt > 0.5 ? "bad" : "hero"}"><span>Не оплачено</span><strong>${mm.debt > 0.5 ? u.usd(mm.debt) : "нет"}</strong><small>начислено всего ${u.usd(mm.charged)}</small></div>` : `<div class="kpi"><span>Город</span><strong class="sm">${E(c.city)}</strong><small>место назначения по умолчанию</small></div>`}
+      </div>
+      <div class="grid2">
+        <div class="box tblbox"><table class="tbl bare"><thead><tr><th>Груз</th><th>Статус</th><th>Состав</th>${m ? '<th class="r">Стоимость</th>' : ""}</tr></thead><tbody>
+          ${rows.map((x) => `<tr class="click" data-act="openItem" data-t="${x.t}" data-id="${x.id}"><td><b class="mono">${E(x.id)}</b><span class="muted s12 blk">${u.dShort(x.at)}</span></td><td>${pill(x.st)}</td><td class="muted">${E(x.d)}</td>${m ? `<td class="r">${x.cost ? u.usd(x.cost.cost) + `<span class="s12 blk ${st.isPaid(x.cost) ? "ok" : "bad"}">${st.isPaid(x.cost) ? "оплачено" : "не оплачено"}</span>` : '<span class="muted">при отправке</span>'}</td>` : ""}</tr>`).join("") || '<tr><td colspan="4" class="muted">Грузов пока нет</td></tr>'}
+        </tbody></table></div>
+        <div class="col">
+          ${asId() ? "" : `<div class="box"><h3>${I("eye")}Кто видит клиента</h3><p class="p0 s13">Администратор${seers.length ? ", " + seers.map((k) => E(S.staff[k].ru)).join(", ") : ""}.</p><p class="muted s12 mt8 p0">Настраивается в разделе <span class="lnk" data-act="d" data-s="staff">«Сотрудники и доступы»</span>.</p></div>`}
+          ${sec("money") ? `<div class="box"><h3>${I("dollar")}Тариф${stg(2)}</h3><div class="pline mini"><span>${E(st.tariffLabel(c))}</span><span class="lnk" data-act="d" data-s="tariffs">Тарифы</span></div></div>` : ""}
+          <div class="box"><h3>${I("clock")}Ждёт посылок</h3>${exp.map((e) => `<div class="pline"><span><b>${E(e.track)}</b><small>${E(e.supplier)}${e.what ? " · " + E(e.what) : ""}</small></span><small class="muted">${u.when(e.at)}</small></div>`).join("") || '<p class="muted p0">Клиент пока не внёс ни одного трек-номера.</p>'}</div>
+          <div class="box"><h3>${I("pin")}Адреса складов для поставщиков</h3><p class="s13 p0 mb8">Клиент отправляет адрес поставщику, тот пишет код на каждой коробке.</p>
+            ${st.WH.map((w) => `<div class="addr"><b>${E(w.ru)}</b><span>${E(w.addr)} · 唛头 ${E(c.id)}</span></div>`).join("")}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ---------- отправки: поиск, фильтры, исправление данных ----------
+  const cfDef = () => ({ q: "", route: "all", status: "all", from: "", to: "" });
+  function consList() {
+    const f = App.tmp.cf || (App.tmp.cf = cfDef()), q = f.q.trim().toUpperCase(), from = fromISO(f.from), to = fromISO(f.to);
+    return st.S.ships.filter((s) => vis(s) && (f.route === "all" || s.route === f.route) && (f.status === "all" || s.status === f.status) && (!from || s.sentAt >= from - 12 * 3600e3) && (!to || s.sentAt <= to + 12 * 3600e3)
+      && (!q || [s.id, s.clientId, cname(s.clientId), s.dest, (st.cargo(s.id) || {}).name].some((x) => String(x || "").toUpperCase().includes(q)))).sort((a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0) || (a.status === "done" ? 1 : 0) - (b.status === "done" ? 1 : 0) || b.sentAt - a.sentAt);
+  }
+  function cons() {
+    const m = seeMoney(), f = App.tmp.cf || (App.tmp.cf = cfDef()), list = consList(), dirty = f.q || f.route !== "all" || f.status !== "all" || f.from || f.to;
+    const rows = list.map((s) => {
+      const t = st.totals(s), cg = st.cargo(s.id);
+      const action = s.status === "way" ? (can("arrive") ? `<button class="btn sm" type="button" data-act="arrive" data-id="${s.id}" data-arr="${s.id}">Прибыл</button>` : "") : s.status === "arrived" ? (can("issue") ? `<button class="btn sm dark" type="button" data-act="openItem" data-t="ship" data-id="${s.id}">Выдать</button>` : "") : "";
+      return `<tr class="click${s.fresh ? " fresh" : ""}" data-act="openItem" data-t="ship" data-id="${s.id}" data-sh="${s.id}"><td><b class="mono">${E(s.id)}</b><div class="muted s12">${E((cg || {}).name || "")}</div></td><td><b>${E(s.clientId)}</b><div class="muted s12">${E(cname(s.clientId))}</div></td><td>${u.places(t.places)}<div class="muted s12">${u.kg(t.weight)} · ${u.vol(t.volume)}</div></td><td><b>${E(s.route)}</b> · ${TR(s.transport).t}<div class="muted s12">${E(s.dest)}</div></td><td>${u.dShort(s.sentAt)}<div class="muted s12">${s.status === "way" ? "прибытие ≈" + u.NB + u.dShort(s.eta) : s.status === "arrived" ? "прибыл " + u.dShort(s.arrivedAt) : s.issue && s.issue.type === "tk" ? "ТК " + E(s.issue.tk) : "выдан " + u.dShort(s.doneAt)}</div></td>${m ? `<td class="r">${u.usd(s.cost)}<div class="s12 ${st.isPaid(s) ? "ok" : "bad"}">${st.isPaid(s) ? "оплачено" : "не оплачено"}</div></td>` : ""}<td>${pill(s.status)}</td><td class="r"><span class="btns">${action}${can("dispatch") ? `<button class="btn sm" type="button" data-act="shipEdit" data-id="${s.id}" data-se="${s.id}" title="Исправить данные" aria-label="Исправить данные">${I("edit")}</button>` : ""}</span></td></tr>`;
+    }).join("");
+    return `<div class="pane">
+      <div class="ph"><div><h1>Отправки</h1><div class="sub">Каждый груз уезжает под своим трек-номером. Отправка оформляется на странице «Грузы», вкладка «Упакован».</div></div><span class="grow"></span>${optBtn("invoice", "Автоматическая накладная")}<button class="btn" type="button" data-act="exportCons">${I("download")}Выгрузить в Excel</button></div>
+      <div class="fbar cons-f" data-hl="cons-f"><label class="search">${I("search")}<input data-in="cfQ" value="${E(f.q)}" placeholder="Трек-номер, клиент, место назначения"></label>
+        <select class="inp sm" data-chg="cfRoute" aria-label="Маршрут"><option value="all">Все маршруты</option>${st.ROUTES.map((r) => `<option${f.route === r ? " selected" : ""}>${r}</option>`).join("")}</select>
+        <select class="inp sm" data-chg="cfStatus" aria-label="Статус"><option value="all">Все статусы</option>${["way", "arrived", "done"].map((k) => `<option value="${k}"${f.status === k ? " selected" : ""}>${L.t("st_" + k)}</option>`).join("")}</select>
+        <label class="dt"><span>с</span><input class="inp sm" type="date" data-in="cfDate" data-k="from" value="${E(f.from)}" aria-label="Отправлены с"></label><label class="dt"><span>по</span><input class="inp sm" type="date" data-in="cfDate" data-k="to" value="${E(f.to)}" aria-label="Отправлены по"></label>
+        ${dirty ? `<button class="btn sm ghost" type="button" data-act="cfClear">${I("x")}Сбросить</button>` : ""}<span class="grow"></span><span class="muted s13">${list.length} ${u.plural(list.length, "отправка", "отправки", "отправок")}</span></div>
+      <table class="tbl"><thead><tr><th>Наш трек-номер</th><th>Клиент</th><th>Груз</th><th>Маршрут</th><th>Отправлен</th>${m ? '<th class="r">Стоимость</th>' : ""}<th>Статус</th><th class="r"></th></tr></thead><tbody>${rows || `<tr><td colspan="${m ? 8 : 7}" class="muted">По этим фильтрам отправок нет</td></tr>`}</tbody></table>
+    </div>`;
+  }
+
+  // ---------- сотрудники и доступы: один простой экран ----------
+  const nstDef = () => ({ name: "", role: "", login: "", pass: "", preset: "", sec: {}, scope: "all", clients: [] });
+  const tgChip = (act, k, on, label) => `<button type="button" class="chipt${on ? " on" : ""}" data-act="${act}" data-k="${k}"><span class="cb">${on ? I("check") : ""}</span>${label}</button>`;
+  function staffModal() {
+    const d = App.tmp.nst || (App.tmp.nst = nstDef());
+    show("staff", `<div class="mh"><div class="mi">${I("user")}</div><div><h2>Новый сотрудник</h2><div class="muted s13">Достаточно имени, логина и пароля. Что он видит, можно задать сейчас или поменять позже.</div></div>${xBtn}</div>
+      <div class="row2"><label class="fld"><span>Имя</span><input class="inp" data-in="nstIn" data-k="name" value="${E(d.name)}" placeholder="Имя и фамилия" autocomplete="off" data-hl="nst-name"></label><label class="fld"><span>Должность</span><input class="inp" data-in="nstIn" data-k="role" value="${E(d.role)}" placeholder="Например: менеджер" autocomplete="off"></label></div>
+      <div class="row2 mt"><label class="fld"><span>Логин</span><input class="inp" data-in="nstIn" data-k="login" value="${E(d.login)}" placeholder="латиницей" autocomplete="off" spellcheck="false"></label><label class="fld"><span>Пароль</span><input class="inp" data-in="nstIn" data-k="pass" value="${E(d.pass)}" placeholder="сотрудник сменит при первом входе" autocomplete="off"></label></div>
+      <div class="fld mt"><span>Набор прав одной кнопкой</span><div class="choice cols3" data-hl="nst-preset">${Object.keys(st.PRESETS).map((k) => `<button type="button" class="${d.preset === k ? "on" : ""}" data-act="nstPreset" data-k="${k}">${cap(st.PRESETS[k][0].replace("как ", ""))}</button>`).join("")}</div></div>
+      <div class="fld mt"><span>Разделы, которые он видит</span><div class="chips">${st.SECTIONS.map(([id, t]) => tgChip("nstSec", id, !!d.sec[id], t)).join("")}</div></div>
+      <div class="fld mt"><span>Клиенты</span><div class="row wrap"><div class="seg light sm">${[["all", "Все клиенты"], ["sel", "Выбранные"]].map(([k, t]) => `<button type="button" class="${d.scope === k ? "on" : ""}" data-act="nstScope" data-k="${k}">${t}</button>`).join("")}</div></div>
+        ${d.scope === "sel" ? `<div class="chips mt8">${st.S.clients.map((c) => tgChip("nstClient", c.id, d.clients.includes(c.id), E(c.id) + " " + E(c.name))).join("")}</div>` : ""}</div>
+      <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="nstGo" id="btnNstGo">${I("check")}Создать</button></div>`, "wide");
+  }
+  // сводка «что он видит» простым текстом
+  function accSummary(k) {
+    const a = st.S.access[k], secs = st.SECTIONS.filter(([id]) => a.sec[id]).map((x) => x[1]), fns = st.FUNCS.filter(([id]) => id !== "cost" && a.fn[id]).map((x) => x[1].toLowerCase());
+    return `<p><b>Разделы:</b> ${secs.join(", ") || "пока ничего не открыто"}.</p><p><b>Клиенты:</b> ${a.scope === "sel" ? (a.clients.length ? "только выбранные: " + a.clients.map(E).join(", ") : "выбранные, пока никто не отмечен") : "все"}.</p>
+      <p><b>Действия:</b> ${fns.join(", ") || "только просмотр"}.</p><p><b>Деньги:</b> ${a.fn.cost ? "видит стоимость и оплаты" : "стоимость и оплаты не видит"}.</p>`;
+  }
+  function accClients(sel, a) {
+    const q = (App.tmp.accq || "").trim().toUpperCase();
+    return st.S.clients.filter((c) => !q || c.id.includes(q) || c.name.toUpperCase().includes(q)).map((c) => { const on = a.clients.includes(c.id); return `<button type="button" class="prow${on ? " on" : ""}" data-act="accClient" data-c="${c.id}" data-ac="${c.id}"><span class="cb">${on ? I("check") : ""}</span><span class="ct"><b>${E(c.id)}</b><small>${E(c.name)}</small></span></button>`; }).join("") || '<p class="muted s13 p0">Никого не нашли</p>';
+  }
+  function staff() {
+    const S = st.S, sel = S.staff[App.tmp.staffSel] ? App.tmp.staffSel : "olga", p = S.staff[sel], a = S.access[sel];
+    const meta = (k) => { const x = S.staff[k], ac = S.access[k]; return x.kind === "admin" ? "полный доступ" : x.kind === "wh" ? "телефон склада" : st.SECTIONS.filter(([id]) => ac.sec[id]).length + " разд. · " + (ac.scope === "sel" ? ac.clients.length + " кл." : "все клиенты"); };
+    const list = Object.keys(S.staff).map((k) => { const x = S.staff[k]; return `<button class="stf${k === sel ? " on" : ""}" type="button" data-act="staffSel" data-k="${k}" data-stf="${k}"><span class="ava sm">${E(x.ava)}</span><span class="ct"><b>${E(x.ru)}</b><small>${E(x.role)} · ${E(x.where)}</small></span><span class="stf-m">${meta(k)}</span></button>`; }).join("");
+    const loginRow = `<div class="acc-login"><div><small>Логин</small><b>${E(p.login)}</b></div><div><small>Пароль</small><b>••••••••</b></div>${p.kind === "admin" ? "" : `<button class="btn sm" type="button" data-act="toast" data-t="Новый пароль отправлен сотруднику: ${E(p.ru)}" data-i="key">${I("key")}Сбросить пароль</button>`}</div>`;
+    const head = (tag) => `<div class="acc-h"><span class="ava">${E(p.ava)}</span><div><h2>${E(p.ru)}</h2><small>${E(p.role)} · ${E(p.where)}</small></div><span class="grow"></span>${tag}</div>`;
+    let panel;
+    if (p.kind === "admin") {
+      panel = `${head('<span class="st lg" data-st="in">полный доступ</span>')}${loginRow}<div class="note">${I("shield")}Администратор видит все разделы, всех клиентов и деньги и может сам выполнить любой шаг: принять груз, организовать упаковку, упаковать за склад, отправить, выдать. Только он создаёт сотрудников и задаёт, что они видят.</div>`;
+    } else if (p.kind === "wh") {
+      panel = `${head('<span class="st lg" data-st="pack">права склада</span>')}${loginRow}
+        <div class="box flat acc-sum"><h3>${I("eye")}Что он видит</h3><p><b>Телефон склада:</b> приёмка, задачи на сборку, упаковка, упакованные грузы и отчёт. Только свой склад: ${E(p.where)}.</p><p><b>Деньги:</b> стоимость и оплаты сотрудникам в Китае не показываются.</p><p class="p0"><b>Язык:</b> 中文 или русский, переключается одной кнопкой.</p></div>
+        <div class="row wrap"><button class="btn" type="button" data-act="mode" data-mode="wh">${I("phone")}Открыть телефон склада</button><span class="grow"></span>${optBtn("wecom", "Задачи в WeCom")}</div>`;
+    } else {
+      const row = (kind, [id, t, s, sg]) => `<div class="acc-r"><span><b>${t}${sg ? stg(sg) : ""}</b><small>${s}</small></span><button class="sw${a[kind][id] ? " on" : ""}" type="button" data-act="accTgl" data-kind="${kind}" data-key="${id}" data-sw="${kind}:${id}" aria-label="${t}"><i></i></button></div>`;
+      panel = `${head(`<button class="btn pri" type="button" data-act="viewAs" data-k="${sel}" id="btnViewAs">${I("eye")}Войти под этим сотрудником</button>`)}${loginRow}
+        <div class="box flat acc-sum" data-hl="acc-sum"><h3>${I("eye")}Что он видит</h3>${accSummary(sel)}</div>
+        <div class="acc-g"><h3>Набор прав одной кнопкой</h3><div class="row wrap" data-hl="acc-presets">${Object.keys(st.PRESETS).map((k) => `<button class="btn sm" type="button" data-act="accPreset" data-k="${k}" data-pr="${k}">${cap(st.PRESETS[k][0].replace("как ", ""))}</button>`).join("")}<span class="muted s12">дальше можно править вручную</span></div></div>
+        <div class="acc-cols"><div class="acc-g" data-hl="acc-sec"><h3>Разделы</h3>${st.SECTIONS.map((x) => row("sec", x)).join("")}${row("fn", st.FUNCS.find((x) => x[0] === "cost"))}</div>
+          <div class="acc-g"><h3>Клиенты</h3><div class="seg light sm" data-hl="acc-scope">${[["all", "Все клиенты"], ["sel", "Выбранные"]].map(([k, t]) => `<button type="button" class="${a.scope === k ? "on" : ""}" data-act="accScope" data-v="${k}">${t}</button>`).join("")}</div>
+            ${a.scope === "sel" ? `<label class="search mt8">${I("search")}<input data-in="accQ" value="${E(App.tmp.accq || "")}" placeholder="Код или название, Enter отмечает" autocomplete="off" data-hl="acc-q"></label><div class="acc-cl" id="accCl">${accClients(sel, a)}</div>` : '<p class="muted s13 mt8 p0">Сотрудник видит грузы всех клиентов. Чтобы ограничить, выберите «Выбранные» и отметьте клиентов галочками.</p>'}</div></div>`;
+    }
+    return `<div class="pane">
+      <div class="ph"><div><h1>Сотрудники и доступы</h1></div><span class="grow"></span><button class="btn pri" type="button" data-act="nstOpen" id="btnNewStaff">${I("plus")}Новый сотрудник</button></div>
+      <div class="note acc-note">${I("info")}Вы сами создаёте сотрудника и задаёте, что он видит. Он входит по своему логину и паролю на этот же адрес.</div>
+      <div class="acc"><div class="stf-l">${list}</div><div class="box acc-p" data-hl="acc-p">${panel}</div></div>
+    </div>`;
+  }
+
+  // ---------- история действий ----------
+  const LK = { accept: ["Приёмка", "in"], unknown: ["Приёмка", "unk"], bind: ["Привязка клиента", "in"], packcmd: ["Организация упаковки", "pack"], collected: ["Сборка", "pack"], lost: ["Не найден", "unk"], packed: ["Упаковка", "pack"], packdiff: ["Упаковано иначе", "unk"], dispatch: ["Отправка", "way"], edit: ["Изменение", "arrived"], delete: ["Удаление", "unk"], arrive: ["Прибытие", "arrived"], issue: ["Выдача", "done"], pay: ["Оплата", "in"], access: ["Доступ", "wait"], doc: ["Документ", "wait"], expected: ["Трек клиента", "wait"] };
+  function histList() {
+    const h = App.tmp.hist, q = h.q.trim().toUpperCase();
+    // точный номер груза показывает всю цепочку: от приёмки до выдачи
+    const o = q.indexOf("TT-") === 0 ? st.ship(q) || st.cargo(q) || st.task(q) : q.indexOf("П-") === 0 ? st.rec(q) : null, chain = o ? st.chainIds(q.indexOf("TT-") === 0 ? "cargo" : "rec", o.receiptIds ? o : st.cargo(q) || o) : null;
+    return st.S.log.filter((e) => (!e.c || mine(e.c)) && (h.who === "all" || e.by === h.who || (h.who === "clients" && String(e.by).indexOf("c:") === 0))
+      && (!q || (chain ? e.ids.some((id) => chain.includes(id)) : e.ids.some((id) => id.toUpperCase().includes(q)) || (e.c || "").includes(q) || e.t.toUpperCase().includes(q)))).reverse();
+  }
+  function history() {
+    const h = App.tmp.hist, list = histList(), shown = list.slice(0, h.all ? 400 : 30), S = st.S;
+    const rows = shown.map((e) => { const k = LK[e.k] || ["Действие", "wait"], p = S.staff[e.by], ref = e.ids.find((x) => x.indexOf("TT-") === 0) || e.ids[0]; return `<tr${ref ? ` class="click" data-act="histOpen" data-id="${E(ref)}"` : ""} data-log="${e.id}"><td class="nw">${u.dShort(e.at)} <span class="muted">${u.hm(e.at)}</span></td><td><span class="row"><span class="ava sm${p ? "" : " cl"}">${p ? E(p.ava) : I("user")}</span><span class="ct"><b>${E(st.who(e.by))}</b><small>${p ? E(p.role) : "кабинет клиента"}</small></span></span></td><td>${pill(k[1], false, k[0])}</td><td>${E(cap(e.t.replace(/^[^:]{3,34}: /, "")))}</td><td class="r muted">${ref ? `<span class="hid mono">${E(ref)}</span>` : ""}</td></tr>`; }).join("");
+    return `<div class="pane">
+      <div class="ph"><div><h1>История действий</h1><div class="sub">Кто, когда и что добавил, изменил или удалил: приёмка, упаковка, отправки, выдача, оплаты, доступы. Записи нельзя изменить.</div></div><span class="grow"></span><button class="btn" type="button" data-act="exportHist">${I("download")}Выгрузить в Excel</button></div>
+      <div class="fbar hist-f"><select class="inp sm" data-chg="histWho" aria-label="Сотрудник" data-hl="hist-who"><option value="all">Все сотрудники</option>${Object.keys(S.staff).map((k) => `<option value="${k}"${h.who === k ? " selected" : ""}>${E(S.staff[k].ru)} · ${E(S.staff[k].role)}</option>`).join("")}<option value="clients"${h.who === "clients" ? " selected" : ""}>Клиенты</option></select>
+        <label class="search" data-hl="hist-q">${I("search")}<input data-in="histQ" value="${E(h.q)}" placeholder="Трек-номер груза или код клиента"></label>${h.q || h.who !== "all" ? `<button class="btn sm ghost" type="button" data-act="histClear">${I("x")}Сбросить</button>` : ""}<span class="grow"></span><span class="muted s13">${list.length} ${u.plural(list.length, "запись", "записи", "записей")}</span></div>
+      <table class="tbl hist" data-hl="hist-t"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Что сделано</th><th class="r">Груз</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">По этому фильтру записей нет</td></tr>'}</tbody></table>
+      ${list.length > shown.length ? `<button class="btn block mt" type="button" data-act="histAll">Показать все ${list.length}</button>` : ""}
+    </div>`;
+  }
+
+  // ---------- что входит ----------
+  const ST1 = ["Одна система и один вход: администратор может сам выполнить любой шаг", "Роли и доступы настраивает администратор: логин и пароль, разделы, деньги, клиенты и отдельные грузы", "Несколько складов в Китае, у каждого свои сотрудники и свои грузы",
+    "Приёмка: сканирование трека камерой телефона, код клиента с подсказками, фото, места, повреждение", "Доставка до склада и доп. расходы в юанях попадают в стоимость клиента", "Клиент заранее вносит трек-номера своих заказов, склад опознаёт груз по треку",
+    "Неизвестные грузы отдельным списком, администратор привязывает их к клиенту", "Грузы на складе по кодам клиентов: выбрать несколько и организовать упаковку", "Наш трек-номер присваивается сам при организации упаковки, клиент следит за грузом по нему",
+    "Склад: сборка по задаче, упаковка четырёх видов с количеством, размеры, вес, объём считается сам", "Отправка: вид доставки, маршрут, место назначения. Список отправок с поиском и фильтрами", "Прибытие и выдача в России: выдача клиенту или передача в транспортную компанию",
+    "История действий: кто, когда, что добавил, изменил и удалил", "Отчёт склада: упаковки за месяц по видам, список упакованных грузов с выгрузкой", "Кабинет клиента на телефоне: статусы, фото, вес и объём, трек-номер, маршрут, документы", "Уведомления в приложении и в Telegram. Русский и китайский интерфейс",
+    "Стоимость по грузу в долларах и отметка об оплате, клиент видит сумму в кабинете", "Работает везде: компьютер, iPhone, Android, без установки из магазинов. Выгрузка списков в Excel"];
+  const ST2 = ["Тарифы клиента: за кг, за кубометр, по плотности, индивидуальные. Стоимость считается сама", "Оплаты в любой валюте: рубли, юани, сомы, тенге, USDT, доллары. Долг ведётся в долларах по курсу", "Расходы, себестоимость и прибыль по грузам, клиентам и периодам", "Сверка с клиентом за период и счета на оплату", "Раздел «Деньги» для бухгалтера, отчёты и выгрузки"];
+  const ST3 = ["Общение сотрудников России и Китая в системе вместо WeChat", "Автоперевод: каждый пишет на своём языке, собеседник читает на своём", "Сообщения привязаны к грузу, можно отправлять фото", "История не теряется при смене сотрудника"];
+  const li = (a) => a.map((t) => `<li><span class="ck">${I("check")}</span><span>${t}</span></li>`).join("");
+  function included() {
+    return `<div class="pane">
+      <div class="ph"><div><h1>Что входит</h1><div class="sub">Три этапа из предложения и шесть дополнительных опций. Этапы независимы: после первого у вас уже рабочая система.</div></div></div>
+      <div class="box stage-card s1"><div class="sc-h"><span class="stg s1 lg">Этап 1</span><div><h2>Движение груза</h2><p>Всё, чтобы вести груз от склада в Китае до клиента без таблиц.</p></div>${allowed("work") ? '<button class="btn" type="button" data-act="d" data-s="work">Открыть «Грузы»</button>' : ""}</div><ul class="inc-list two">${li(ST1)}</ul></div>
+      <div class="grid-e">
+        <div class="box stage-card"><div class="sc-h"><span class="stg s2 lg">Этап 2</span><div><h2>Деньги и учёт</h2><p>Когда захотите.</p></div>${allowed("money") ? '<button class="btn" type="button" data-act="d" data-s="money">Посмотреть</button>' : ""}</div><ul class="inc-list">${li(ST2)}</ul></div>
+        <div class="box stage-card"><div class="sc-h"><span class="stg s3 lg">Этап 3</span><div><h2>Чат с автопереводом</h2><p>Когда захотите.</p></div>${allowed("chat") ? '<button class="btn" type="button" data-act="d" data-s="chat">Посмотреть</button>' : ""}</div><ul class="inc-list">${li(ST3)}</ul></div>
+      </div>
+      <h3 class="h3 mt2">Дополнительно, по желанию</h3>
+      <div class="opt-grid">${Object.keys(App.OPT).map((k) => { const o = App.OPT[k]; return `<button class="opt-card" type="button" data-act="opt" data-k="${k}"><span class="oi">${I(o.icon)}</span><span><b>${E(o.t)}</b><small>${E(o.s)}</small></span></button>`; }).join("")}</div>
+      <p class="muted s13 mt">Опции отмечены в интерфейсе меткой «опция» на своих местах: в карточке отправки, на приёмке, в отчётах, в сотрудниках и в кабинете клиента.</p>
+    </div>`;
+  }
+
+  // ---------- действия ----------
+  const csvDl = (name, rows, okText) => App.toast(u.download(name, u.csv(rows)) ? okText || "Файл " + name + " скачан, открывается в Excel" : "Браузер не дал скачать файл", "download");
+  function redraw() { const k = App.tmp.mk; if (!App.modalOpen()) return; if (k === "card") redrawCard(); else if (k === "accept") acceptModal(); else if (k === "org") orgModal(); else if (k === "send") sendModal(); else if (k === "sed") shipEditModal(); else if (k === "staff") staffModal(); }
+  const acts = {
+    openItem: (d) => openItem(d.t, d.id),
+    histOpen: (d) => openById(d.id),
+    whF: (d) => { App.tmp.whF = d.k; App.refresh(true); },
+    laneAll: (d) => { App.tmp.laneAll = App.tmp.laneAll || {}; App.tmp.laneAll[d.k] = !App.tmp.laneAll[d.k]; App.refresh(true); },
+    // рабочая страница «Грузы»
+    wtab: (d) => { App.tmp.wtab = d.k; App.refresh(true); if (App.scenario) App.scenario.check("wtab", d.k); },
+    wcode: (d) => { App.tmp.wcode = d.c; App.tmp.csel = []; App.tmp.wbind = null; App.refresh(true); },
+    cgSel: (d) => {
+      const r = st.rec(d.id), sel = csel(); if (!r) return;
+      if (sel.length && st.rec(sel[0]).wh !== r.wh && r.clientId) { App.tmp.csel = [d.id]; App.toast("В один заказ на упаковку идут грузы с одного склада", "info"); }
+      else { const i = sel.indexOf(d.id); if (i >= 0) sel.splice(i, 1); else sel.push(d.id); }
+      App.refresh(true);
+    },
+    cgAll: () => { const g = stockGroups()[App.tmp.wcode] || [], sel = csel(); App.tmp.csel = sel.length === g.length ? [] : g.filter((r) => !r.clientId || r.wh === g[0].wh).map((r) => r.id); App.refresh(true); },
+    orgOpen: () => { const sel = csel(); if (sel.length) orgOpen(sel.slice(), null); },
+    orgOne: (d) => orgOpen([d.id], "card"),
+    orgDrop: (d) => { const o = App.tmp.org; if (o && o.ids.length > 1) { o.ids = o.ids.filter((x) => x !== d.id); orgModal(); } },
+    orgPack: (d) => { const o = App.tmp.org, i = o.packPlan.indexOf(d.k); if (i >= 0) o.packPlan.splice(i, 1); else o.packPlan.push(d.k); o.picked = true; orgModal(); },
+    orgTr: (d) => { App.tmp.org.transport = d.k; orgModal(); },
+    orgFill: () => { const o = App.tmp.org; if (!o) return; o.name = o.name || "Светильники и посуда"; if (!o.packPlan.length) o.packPlan = ["crate"]; o.transport = o.transport || "auto"; o.note = o.note || "Хрупкое, проложить пенопластом"; o.picked = true; orgModal(); },
+    orgGo: () => {
+      const o = App.tmp.org; if (!o || !o.ids.length) return;
+      const t = st.organize(o.ids.slice(), { name: o.name, packPlan: o.packPlan, transport: o.transport, note: o.note, date: fromISO(o.date), by: actor() });
+      App.tmp.org = null; App.tmp.csel = [];
+      if (!t) { App.closeDesk(); return; }
+      if (o.from === "card") openItem("task", t.id); else App.closeDesk();
+      App.toast(`Упаковка организована: трек-номер ${t.id}, склад ${whn(t.wh)} получил задачу`, "layers");
+      if (App.scenario) App.scenario.check("packcmd", t);
+    },
+    wbindGo: () => { const sel = csel(), c = App.tmp.wbind; if (!sel.length || !c) return; sel.forEach((id) => st.assignUnknown(id, c, actor())); App.tmp.csel = []; App.tmp.wbind = null; App.tmp.wcode = c; App.toast(`Привязано к клиенту ${c} ${cname(c)}: ${recsWord(sel.length)}`, "check"); },
+    pSel: (d) => { const sel = psel(), i = sel.indexOf(d.id); if (i >= 0) sel.splice(i, 1); else sel.push(d.id); App.refresh(true); },
+    sendOpen: () => { const sel = psel(); if (sel.length) sendOpen(sel.slice()); },
+    sendOne: (d) => sendOpen([d.id]),
+    sndDrop: (d) => { const o = App.tmp.snd; if (o && o.ids.length > 1) { o.ids = o.ids.filter((x) => x !== d.id); sendModal(); } },
+    sndTr: (d) => { App.tmp.snd.transport = d.k; sendModal(); },
+    sndRoute: (d) => { App.tmp.snd.route = d.k; App.tmp.snd.picked = true; sendModal(); },
+    sndFill: () => { const o = App.tmp.snd; if (!o) return; o.route = "88G"; o.picked = true; sendModal(); },
+    sndGo: () => {
+      const o = App.tmp.snd; if (!o || !can("dispatch")) return;
+      const list = st.send(o.ids.slice(), { transport: o.transport, route: o.route, dest: o.dest, date: o.date === dISO(Date.now()) ? null : fromISO(o.date), by: actor() });
+      App.tmp.snd = null; App.tmp.psel = []; App.closeDesk();
+      if (list.length) { App.toast(list.length > 1 ? `Отправлено грузов: ${list.length}, маршрут ${list[0].route}. Клиенты получили уведомления` : `Груз ${list[0].id} отправлен: маршрут ${list[0].route}, ${list[0].dest}`, "send"); if (App.scenario) list.forEach((s) => App.scenario.check("dispatched", s)); }
+    },
+    shipEdit: (d) => { const s = st.ship(d.id); if (!s || !can("dispatch")) return; App.tmp.sed = { id: s.id, transport: s.transport, route: s.route, dest: s.dest, date: dISO(s.sentAt), cost: String(s.cost) }; shipEditModal(); },
+    sedTr: (d) => { App.tmp.sed.transport = d.k; shipEditModal(); },
+    sedRoute: (d) => { App.tmp.sed.route = d.k; shipEditModal(); },
+    sedGo: () => { const d = App.tmp.sed; if (!d) return; const s = st.ship(d.id), nd = fromISO(d.date); st.editShip(d.id, { transport: d.transport, route: d.route, dest: d.dest, date: nd && dISO(s.sentAt) !== d.date ? nd : null, cost: seeMoney() ? u.parse(d.cost) : null }, actor()); App.tmp.sed = null; App.closeDesk(); App.toast(`Данные отправки ${d.id} исправлены, запись в истории`, "edit"); },
+    cfClear: () => { App.tmp.cf = cfDef(); App.refresh(true); },
+    // упаковка за склад из карточки заказа
+    tpFound: (d) => { const x = App.tmp.tp; if (!x) return; const i = x.found.indexOf(d.id); if (i >= 0) x.found.splice(i, 1); else x.found.push(d.id); redrawCard(); },
+    tpDimAdd: () => { if (App.tmp.tp) { App.tmp.tp.dims.push({ l: "", w: "", h: "", n: "" }); redrawCard(); } },
+    tpDimDel: (d) => { const x = App.tmp.tp; if (x && x.dims.length > 1) { x.dims.splice(+d.i, 1); redrawCard(); } },
+    tpPhoto: () => { if (App.tmp.tp) { App.tmp.tp.photos.push(photoSeq++); redrawCard(); } },
+    tpFill: () => { const x = App.tmp.tp; if (!x) return; x.packs = { crate: "2", bag: "4" }; x.dims = [{ l: "50", w: "50", h: "60", n: "4" }, { l: "90", w: "80", h: "60", n: "2" }]; x.weight = "142"; if (!x.photos.length) x.photos.push(photoSeq++); redrawCard(); },
+    taskPack: (d) => {
+      const t = st.task(d.id), x = App.tmp.tp; if (!t || !x || x.id !== d.id || !can("packcmd")) return;
+      if (t.status === "collect" && !st.collect(t.id, x.found.slice(), actor())) return;
+      const c = st.pack(t.id, { packs: x.packs, dims: x.dims, weight: u.parse(x.weight), photos: x.photos, note: x.note, by: actor() });
+      App.tmp.tp = null;
+      if (c) { openItem("cargo", c.id); App.toast(`Груз ${c.id} упакован, клиент получил уведомление`, "check"); if (App.scenario) App.scenario.check("packed", c); }
+    },
+    taskCancel: (d) => confirmBox("Отменить заказ на упаковку?", `Заказ ${E(d.id)} будет отменён, грузы вернутся во вкладку «На складе». Запись появится в истории действий.`, "taskCancelYes", d.id, "Отменить заказ"),
+    taskCancelYes: (d) => { App.closeOverlay(); const t = st.cancelTask(d.id, actor()); if (t) { App.closeDesk(); App.tmp.wcode = t.clientId; App.toast(`Заказ ${t.id} отменён, грузы снова на складе`, "x"); } },
+    recDel: (d) => confirmBox("Удалить приход?", `Приход ${E(d.id)} будет удалён из системы. Запись об удалении останется в истории действий.`, "recDelYes", d.id, "Удалить"),
+    recDelYes: (d) => { App.closeOverlay(); const r = st.removeRec(d.id, actor()); if (r) { App.closeDesk(); App.toast(`Приход ${r.id} удалён, запись в истории`, "x"); } },
+    arrive: (d) => { if (!can("arrive")) { noAccess(); return; } const s = st.arrive(d.id, actor()); if (s) { App.toast(`Груз ${d.id} прибыл в Россию. Клиент получил уведомление`, "bell"); redrawCard(); if (App.scenario) App.scenario.check("arrived", s); } },
+    issType: (d) => { if (App.tmp.issue) { App.tmp.issue.type = d.k; redrawCard(); } },
+    issTk: (d) => { if (App.tmp.issue) { App.tmp.issue.tk = d.k; redrawCard(); } },
+    issFill: () => { const x = App.tmp.issue; if (!x) return; x.type = "tk"; x.tk = "СДЭК"; x.waybill = x.waybill || "10094417725"; redrawCard(); },
+    issGo: (d) => {
+      const x = App.tmp.issue && App.tmp.issue.id === d.id ? App.tmp.issue : { type: "client" };
+      const s = st.issue(d.id, { type: x.type, tk: x.tk, waybill: x.waybill, by: actor() });
+      App.tmp.issue = null;
+      if (s) { redrawCard(); App.toast(s.issue.type === "tk" ? `Груз ${s.id} передан в ${s.issue.tk}, клиент получил номер накладной` : `Груз ${s.id} выдан клиенту`, "check"); if (App.scenario) App.scenario.check("issued", s); }
+    },
+    togglePaid: (d) => { const s = st.ship(d.id); st.setPaid(d.id, !st.isPaid(s), actor()); redrawCard(); App.toast(st.isPaid(s) ? "Отмечено: оплачено. Клиент видит это в кабинете" : "Отметка об оплате снята", "wallet"); },
+    addDoc: (d) => { st.addDoc(d.id, d.n, actor()); redrawCard(); App.toast("Документ прикреплён, клиент видит его в кабинете", "file"); },
+    taPick: (d, el) => { const box = el.closest(".ta"), inp = box && box.querySelector("input"); if (inp) { taHide(inp); inp.blur(); } const fn = App.taPick[d.k]; if (fn) fn(d.v); },
+    bindGo: (d) => { if (!App.tmp.bind) return; const r = st.assignUnknown(d.id, App.tmp.bind, actor()); App.tmp.bind = null; if (r) { redrawCard(); App.toast(`Груз ${r.id} привязан к клиенту ${r.clientId} ${cname(r.clientId)}. Клиент получил уведомление`, "check"); } },
+    // приёмка с компьютера
+    acceptOpen: () => { App.tmp.dacc = null; acceptModal(); },
+    daWh: (d) => { dacc().wh = d.k; acceptModal(); },
+    daPlaces: (d) => { const x = dacc(); x.places = Math.max(1, (parseInt(x.places, 10) || 1) + parseInt(d.d, 10)); acceptModal(); },
+    daPhoto: () => { dacc().photos.push(photoSeq++); acceptModal(); },
+    daDmgPhoto: () => { dacc().dmgPhotos.push(photoSeq++); acceptModal(); },
+    daDmg: (d) => { const x = dacc(); x.dmg = x.dmg === d.k ? null : d.k; acceptModal(); },
+    daDoor: (d) => { const x = dacc(); x.dpay = x.dpay === d.k ? null : d.k; acceptModal(); },
+    daGo: () => {
+      const x = dacc();
+      const r = st.accept({ wh: x.wh, clientId: x.clientId, track: x.track, supplier: x.supplier, what: x.what, expId: x.expId, expAt: x.expAt, places: x.places, damage: x.dmg === "yes" ? x.dmgText.trim() || "Есть повреждение" : "", dmgPhotos: x.dmgPhotos, photos: x.photos, dpay: x.dpay, deliv: u.parse(x.deliv), extra: u.parse(x.extra), note: x.note, by: actor() });
+      App.tmp.dacc = null; App.closeDesk(); if (r.clientId) App.tmp.wcode = r.clientId;
+      App.toast(r.clientId ? `Груз ${r.id} принят, клиент ${r.clientId} получил уведомление` : `Груз ${r.id} принят без кода клиента и ушёл в «Неизвестные»`, r.clientId ? "check" : "alert");
+    },
+    // сотрудники и доступы
+    staffSel: (d) => { App.tmp.staffSel = d.k; App.tmp.accq = ""; App.refresh(true); },
+    nstOpen: () => { App.tmp.nst = null; staffModal(); },
+    nstPreset: (d) => { const x = App.tmp.nst, pr = st.PRESETS[d.k][1].split(" "); x.preset = x.preset === d.k ? "" : d.k; x.sec = {}; if (x.preset) pr.forEach((k) => { x.sec[k] = true; }); staffModal(); },
+    nstSec: (d) => { const x = App.tmp.nst; x.sec[d.k] = !x.sec[d.k]; staffModal(); },
+    nstScope: (d) => { App.tmp.nst.scope = d.k; staffModal(); },
+    nstClient: (d) => { const x = App.tmp.nst, i = x.clients.indexOf(d.k); if (i >= 0) x.clients.splice(i, 1); else x.clients.push(d.k); staffModal(); },
+    wsort: () => { App.tmp.wsort = App.tmp.wsort === "old" ? "new" : "old"; App.refresh(true); },
+    zoom: (d) => App.overlay(`<div class="zoom">${u.photo(+d.p, d.kind || undefined)}</div><div class="of"><button class="btn lg block" type="button" data-act="closeAny">Закрыть</button></div>`),
+    nstFill: () => { const x = App.tmp.nst; if (!x) return; x.name = x.name || "Анна Белова"; x.role = x.role || "Менеджер"; x.login = x.login || "anna.belova"; x.pass = x.pass || "demo"; if (!x.preset) { x.preset = "manager"; x.sec = {}; st.PRESETS.manager[1].split(" ").forEach((k) => { x.sec[k] = true; }); } staffModal(); },
+    nstGo: () => { const x = App.tmp.nst || {}; if (!String(x.name || "").trim()) { App.toast("Укажите имя сотрудника", "info"); return; } const id = st.createStaff(x); App.tmp.nst = null; App.tmp.staffSel = id; App.closeDesk(); App.toast(`Сотрудник ${st.STAFF[id].ru} создан. Логин ${st.STAFF[id].login}`, "user"); if (App.scenario) App.scenario.check("staffNew", id); },
+    accTgl: (d) => { const k = App.tmp.staffSel, a = st.S.access[k]; if (!a) return; st.setAccess(k, d.kind, d.key, !a[d.kind][d.key]); },
+    accScope: (d) => st.setAccess(App.tmp.staffSel, "scope", null, d.v),
+    accClient: (d) => { const k = App.tmp.staffSel, a = st.S.access[k]; if (a) st.setAccess(k, "client", d.c, !a.clients.includes(d.c)); },
+    accPreset: (d) => { st.applyPreset(App.tmp.staffSel, d.k); App.toast(`Применён набор прав «${st.PRESETS[d.k][0]}». Дальше можно править вручную`, "shield"); if (App.scenario) App.scenario.check("preset", d.k); },
+    viewAs: (d) => { if (!st.S.access[d.k]) return; App.ui.viewAs = d.k; App.saveUI(); App.go.desk(home()); App.toast(`Вы вошли как ${st.who(d.k)}: видно только то, что ему открыто`, "eye"); if (App.scenario) App.scenario.check("viewAs", d.k); },
+    viewBack: () => { if (!App.ui.viewAs) return; App.ui.viewAs = null; App.saveUI(); App.go.desk("staff"); if (App.scenario) App.scenario.check("viewBack"); },
+    // история
+    histClear: () => { App.tmp.hist = { who: "all", q: "", all: false }; App.refresh(true); },
+    histAll: () => { App.tmp.hist.all = true; App.refresh(true); },
+    histCargo: (d) => { App.tmp.hist = { who: "all", q: d.q || "", all: false }; App.refresh(true); },
+    exportHist: () => csvDl("istoriya_" + today() + ".csv", [["Дата", "Время", "Кто", "Действие", "Что сделано", "Груз"]].concat(histList().map((e) => [u.dFull(e.at), u.hm(e.at), st.who(e.by), (LK[e.k] || ["Действие"])[0], e.t, e.ids.find((x) => x.indexOf("TT-") === 0) || e.ids[0] || ""]))),
+    exportBoard: () => { const d = boardData(); csvDl("gruzy_" + today() + ".csv", [["Статус", "Номер", "Код клиента", "Клиент", "Склад", "Мест", "Вес, кг", "Объём, м³", "Маршрут"]].concat(d.in.map((r) => ["На складе", r.id, r.clientId, cname(r.clientId), whn(r.wh), r.places, "", "", ""])).concat(d.packing.map((t) => ["На упаковке", t.id, t.clientId, cname(t.clientId), whn(t.wh), st.taskPlaces(t), "", "", ""])).concat(d.pack.map((c) => ["Упакован", c.id, c.clientId, cname(c.clientId), whn(c.wh), c.places, c.weight, u.num(c.volume, 2), ""])).concat(d.way.concat(d.arrived).map((s) => { const t = st.totals(s); return [L.t("st_" + s.status), s.id, s.clientId, cname(s.clientId), "", t.places, Math.round(t.weight), u.num(t.volume, 2), s.route]; }))); },
+    exportCons: () => csvDl("otpravki_" + today() + ".csv", [["Трек-номер", "Код клиента", "Клиент", "Вид доставки", "Маршрут", "Место назначения", "Мест", "Вес, кг", "Объём, м³", "Отправлен", "Статус"].concat(seeMoney() ? ["Стоимость, $", "Оплачено"] : [])].concat(consList().map((s) => { const t = st.totals(s); return [s.id, s.clientId, cname(s.clientId), TR(s.transport).t, s.route, s.dest, t.places, Math.round(t.weight), u.num(t.volume, 2), u.dFull(s.sentAt), L.t("st_" + s.status)].concat(seeMoney() ? [s.cost, st.isPaid(s) ? "да" : "нет"] : []); }))),
+  };
+  Object.assign((App.acts = App.acts || {}), acts);
+  Object.assign(App.taPick, {
+    wq: (v) => { App.tmp.wq = ""; App.tmp.wcode = v; App.tmp.csel = []; App.refresh(true); },
+    wbind: (v) => { App.tmp.wbind = v; App.refresh(true); },
+    bind: (v) => { App.tmp.bind = v; redrawCard(); },
+    dacc: (v) => { const x = dacc(); x.clientId = v || null; x.auto = false; acceptModal(); },
+  });
+  Object.assign(App.taType, {
+    wq: (v) => { App.tmp.wq = v; const l = $("wkCodes"); if (l) l.innerHTML = codesHtml(stockGroups(), App.tmp.wcode); },
+    wbind: () => { if (App.tmp.wbind) { App.tmp.wbind = null; const b = $("btnWbind"); if (b) b.disabled = true; } },
+    bind: () => { if (App.tmp.bind) { App.tmp.bind = null; const b = $("btnCardNext"); if (b) b.disabled = true; } },
+    dacc: () => { const x = dacc(); x.clientId = null; x.auto = false; },
+  });
+
+  App.ins = Object.assign(App.ins || {}, {
+    taQ: (v, el) => { const fn = App.taType[el.dataset.k]; if (fn) fn(v, el); taShow(el); },
+    q: (v) => { App.tmp.q = v; App.refresh(true); },
+    clientsQ: (v) => { App.tmp.clientsQ = v; App.refresh(true); },
+    histQ: (v) => { App.tmp.hist.q = v; App.tmp.hist.all = false; App.refresh(true); },
+    cfQ: (v) => { App.tmp.cf.q = v; App.refresh(true); },
+    cfDate: (v, el) => { App.tmp.cf[el.dataset.k] = v; App.refresh(true); },
+    accQ: (v) => { App.tmp.accq = v; const l = $("accCl"), k = App.tmp.staffSel; if (l) l.innerHTML = accClients(k, st.S.access[k]); },
+    orgIn: (v, el) => { if (App.tmp.org) App.tmp.org[el.dataset.k] = v; },
+    sndIn: (v, el) => { if (App.tmp.snd) App.tmp.snd[el.dataset.k] = v; },
+    sedIn: (v, el) => { if (App.tmp.sed) App.tmp.sed[el.dataset.k] = v; },
+    nstIn: (v, el) => { if (App.tmp.nst) App.tmp.nst[el.dataset.k] = v; if (App.scenario) App.scenario.decorate(); },
+    tpIn: (v, el) => { if (App.tmp.tp) App.tmp.tp[el.dataset.k] = v; },
+    tpPack: (v, el) => { if (App.tmp.tp) App.tmp.tp.packs[el.dataset.k] = v; },
+    tpDim: (v, el) => { const x = App.tmp.tp; if (!x || !x.dims[+el.dataset.i]) return; x.dims[+el.dataset.i][el.dataset.k] = v; const o = $("tpVol"); if (o) o.textContent = u.vol(st.dimsVolume(x.dims)); },
+    issWb: (v) => { if (App.tmp.issue) App.tmp.issue.waybill = v; if (App.scenario) App.scenario.decorate(); },
+    daTrack: (v) => { dacc().track = v; if (daMatch()) acceptModal(); },
+    daIn: (v, el) => { dacc()[el.dataset.k] = el.dataset.k === "places" ? Math.max(1, parseInt(v, 10) || 1) : v; },
+  });
+  App.chg = Object.assign(App.chg || {}, {
+    histWho: (v) => { App.tmp.hist.who = v; App.tmp.hist.all = false; App.refresh(true); },
+    cfRoute: (v) => { App.tmp.cf.route = v; App.refresh(true); },
+    cfStatus: (v) => { App.tmp.cf.status = v; App.refresh(true); },
+    sndDest: (v) => { if (App.tmp.snd) App.tmp.snd.dest = v; },
+    sedDest: (v) => { if (App.tmp.sed) App.tmp.sed.dest = v; },
+  });
+  document.addEventListener("change", (e) => { const el = e.target.closest && e.target.closest("[data-chg]"); if (el && App.chg[el.dataset.chg]) App.chg[el.dataset.chg](el.value, el); });
+  // Enter в поиске по клиентам в доступах отмечает первого найденного
+  document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target && e.target.dataset && e.target.dataset.in === "accQ") { const b = document.querySelector("#accCl .prow"); if (b) { e.preventDefault(); b.click(); } } });
+
+  App.DK = { asId, acc, actor, can, sec, seeMoney, mine, vis, pill, stg, optBtn, cname, whn, xBtn, today, csvDl, show, recsWord, TR, dISO };
+  App.D = {
+    side, chromeBar, allowed, home, screens: { board, work, clients, client, cons, staff, history, included },
+    after() { const m = $("chatMsgs"); if (m) m.scrollTop = m.scrollHeight; },
+    sync: redraw, openItem, openById, orgOpen, orgModal, sendOpen, sendModal, shipEditModal, acceptModal, staffModal,
+  };
+})(window.App);
