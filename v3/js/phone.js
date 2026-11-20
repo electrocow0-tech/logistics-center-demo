@@ -1,5 +1,5 @@
-/* Экраны телефона. Два независимых телефона (слота), у каждого своя роль, экран и язык.
-   Слот 0: склад в Китае (пять вкладок, рабочий китайский интерфейс), слот 1: клиент. */
+/* Экраны телефона. Три независимых телефона (слота), у каждого своя роль, экран и язык.
+   Слот 0: склад в Китае (пять вкладок, рабочий китайский интерфейс), слот 1: клиент, слот 2: склад в Москве (экраны в phone2.js, подключаются через App.PX). */
 (function (App) {
   "use strict";
   const u = App.u, st = App.store, I = u.icon, E = u.esc, ME = st.ME;
@@ -7,10 +7,8 @@
   const zhRole = (r) => r === "warehouse";
   function ctx(i) { cur = i || 0; slot = App.ui.slots[cur]; T = App.i18n.of(zhRole(slot.role) ? slot.lang : "ru"); }
   const q = (sel) => App.slotEl(cur).querySelector(sel);
-  const shown = (i) => App.ui.mode === (i === 0 ? "wh" : "client");
+  const shown = (i) => App.ui.mode === (["wh", "client", "msk"][i] || "wh");
   const pill = (s, label) => `<span class="st" data-st="${s}">${label || T.t("st_" + s)}</span>`;
-  const stg = (n) => `<em class="stg s${n}">${n === 3 ? T.t("stage3") : "Этап " + n}</em>`;
-  const optBtn = (k, label) => `<button class="opt" type="button" data-act="opt" data-k="${k}">${I((App.OPT[k] || {}).icon || "spark")}<span class="ol">${E(label)}</span><i>${T.t("opt")}</i></button>`;
   const head = (t, small, right) => `<div class="phead"><div><small>${small}</small><h2>${t}</h2></div>${right || ""}</div>`;
   const langSw = () => `<div class="lang" data-hl="lang"><button type="button" class="${slot.lang === "ru" ? "on" : ""}" data-act="lang" data-l="ru">RU</button><button type="button" class="${slot.lang === "zh" ? "on" : ""}" data-act="lang" data-l="zh">中文</button></div>`;
   const cn = (id) => (st.client(id) || {}).name || "";
@@ -22,31 +20,35 @@
   let photoSeq = 500;
 
   const SCREENS = {
-    warehouse: ["accept", "accepted", "stock", "stockc", "tasks", "task", "packs", "packf", "packed", "done", "donec", "report", "reportk", "chats", "chat"],
+    warehouse: ["accept", "accepted", "stock", "stockc", "tasks", "task", "packs", "packf", "packed", "done", "donec", "report", "reportk"],
     client: ["ships", "citem", "await", "pay", "profile"],
   };
-  const has = (role, screen) => (SCREENS[role] || []).includes(screen);
+  // роли из других файлов (склад в Москве): App.PX[role] = {screens, tabs(i, slot), render(i, slot), after(i, slot)}
+  const px = (role) => (App.PX || {})[role] || null;
+  const has = (role, screen) => (px(role) ? px(role).screens.includes(screen) : (SCREENS[role] || []).includes(screen));
 
   function tabs(i) {
     ctx(i);
     const r = slot.role;
+    if (px(r)) return px(r).tabs(i, slot);
     const map = r === "client" ? [["ships", "box", "Грузы"], ["await", "clock", "Жду"], ["pay", "wallet", "Оплаты"], ["profile", "user", "Профиль"]]
       : [["accept", "plus", T.t("tab_accept")], ["tasks", "list", T.t("tab_tasks")], ["packs", "layers", T.t("tab_packs")], ["done", "box", T.t("tab_done")], ["report", "chart", T.t("tab_report")]];
-    const curTab = { accepted: "accept", stock: "accept", stockc: "accept", task: "tasks", packf: "packs", packed: "packs", donec: "done", reportk: "report", chat: "chats", citem: "ships" }[slot.screen] || slot.screen;
+    const curTab = { accepted: "accept", stock: "accept", stockc: "accept", task: "tasks", packf: "packs", packed: "packs", donec: "done", reportk: "report", citem: "ships" }[slot.screen] || slot.screen;
     const badge = r === "warehouse" ? { tasks: st.openTasks(slot.wh, "collect").length, packs: st.openTasks(slot.wh, "packing").length }
       : { pay: st.money(ME).debt > 0.5 ? 1 : 0 };
-    return map.map(([k, ic, t, sg]) => `<button type="button" class="${curTab === k ? "on" : ""}" data-act="p" data-s="${k}" data-tab="${k}">${I(ic)}<span>${t}${sg ? `<em> · ${T.t("stage3").toLowerCase()}</em>` : ""}</span><i class="${badge[k] ? "show" : ""}">${badge[k] || ""}</i></button>`).join("");
+    return tabBtns(map, curTab, badge);
   }
-  function render(i) { ctx(i); return (S_[slot.screen] || S_[App.PHOME[slot.role]])(slot.p); }
-  function after(i) { ctx(i); if (slot.screen === "chat") { const v = App.sq(i, ".pview"); v.scrollTop = v.scrollHeight; } }
+  // кнопки нижних вкладок телефона: [экран, значок, подпись], текущая вкладка и числа на значках
+  const tabBtns = (map, curTab, badge) => map.map(([k, ic, t]) => `<button type="button" class="${curTab === k ? "on" : ""}" data-act="p" data-s="${k}" data-tab="${k}">${I(ic)}<span>${t}</span><i class="${badge[k] ? "show" : ""}">${badge[k] || ""}</i></button>`).join("");
+  function render(i) { ctx(i); if (px(slot.role)) return px(slot.role).render(i, slot); return (S_[slot.screen] || S_[App.PHOME[slot.role]])(slot.p); }
+  function after(i) { ctx(i); if (px(slot.role) && px(slot.role).after) px(slot.role).after(i, slot); }
   // перерисовать экран на месте, не теряя прокрутку
   function rr() { const v = q(".pview"), top = v.scrollTop; App.renderSlot(cur, false); v.scrollTop = top; }
 
   // ================= СКЛАД В КИТАЕ =================
   const whName = () => T.wh(st.wh(slot.wh));
   const whSel = () => `<button class="whsel" type="button" data-act="whPick" data-hl="wh-pick">${E(T.t("wh_title", whName()))}${I("down")}</button>`;
-  const chatB = () => { const n = st.unreadAll("zh", slot.wh); return `<button class="x soft chatb" type="button" data-act="p" data-s="chats" title="${T.t("tab_chat")} · ${T.t("stage3")}" aria-label="${T.t("tab_chat")}">${I("lang")}${n ? `<i>${n}</i>` : ""}</button>`; };
-  const whHead = (t) => head(t, whSel(), `<span class="hr">${chatB()}${langSw()}</span>`);
+  const whHead = (t) => head(t, whSel(), `<span class="hr">${langSw()}</span>`);
   function whSheet() {
     App.sheet(cur, `<h3>${T.t("wh_pick")}</h3><p>${T.t("wh_pick_s")}</p><div class="choice">${st.WH.map((w) => `<button type="button" class="${w.id === slot.wh ? "on" : ""}" data-act="whSet" data-k="${E(w.id)}">${I("wh")}<span class="grow">${E(T.wh(w))}<small>${E(st.who(st.WH_STAFF[w.id], T.lang))} · ${E(T.t("wh_cnt", st.S.receipts.filter((r) => r.wh === w.id && !r.cargoId).length + st.ready(w.id).length))}</small></span></button>`).join("")}</div>`);
   }
@@ -82,7 +84,6 @@
         <div class="doorbox" data-f="doorBox" ${d.dpay === "wh" ? "" : "hidden"}><input class="inp" data-f="deliv" data-in="accIn" data-k="deliv" inputmode="numeric" value="${E(d.deliv)}" placeholder="${T.t("door_sum")}" data-hl="acc-door-sum"></div></div>
       <div class="row2 mt"><label class="fld"><span>${T.t("acc_extra")}</span><input class="inp" data-f="extra" data-in="accIn" data-k="extra" inputmode="numeric" value="${E(d.extra)}" placeholder="0"></label><label class="fld"><span>${T.t("acc_note")}</span><input class="inp" data-f="note" data-in="accIn" data-k="note" value="${E(d.note)}" placeholder="${T.t("acc_note_ph")}" autocomplete="off"></label></div>
       <div class="req left">${T.t("sum_hint")}</div>
-      <div class="row wrap mt8">${optBtn("voice", T.t("opt_voice"))}</div>
       <div class="mt"><button class="btn pri lg block" type="button" data-f="btnAccept" data-act="accGo" data-hl="acc-go">${I("check")}${T.t("acc_go")}</button>
       <div class="req">${T.t("acc_free")}</div></div>
     </div>`;
@@ -273,54 +274,32 @@
     </div>`;
   }
 
-  // ================= ЧАТ С АВТОПЕРЕВОДОМ (ЭТАП 3) =================
-  const chatSide = () => "zh";
-  function chats() {
-    const side = chatSide(), C = App.chatUI, list = C.threadsSorted(slot.role === "warehouse" ? slot.wh : null);
-    return `<div class="pp">${head(T.t("ch_title") + stg(3), T.t("ch_sub"), zhRole(slot.role) ? langSw() : "")}
-      ${list.map((t) => { const x = C.threadTitle(t, zhRole(slot.role) ? T.lang : "ru"), n = st.unread(t, side); return `<button class="pcard pthr" type="button" data-act="p" data-s="chat" data-p="${E(t.id)}" data-thr="${E(t.id)}"><span class="t"><span class="id tt">${E(x.id)} · ${E(x.code)}</span>${n ? `<i class="nb">${n}</i>` : `<span class="muted s12">${T.when((t.msgs[t.msgs.length - 1] || {}).at || Date.now())}</span>`}</span><span class="sub strong ell1">${E(C.lastText(t, side))}</span><span class="sub">${E(x.kind)} · ${E(x.wh)}</span></button>`; }).join("") || empty(T.t("ch_empty"))}
-    </div>`;
-  }
-  function chat(p) {
-    const t = st.thread(p); if (!t) return chats();
-    const side = chatSide(), C = App.chatUI, x = C.threadTitle(t, zhRole(slot.role) ? T.lang : "ru");
-    if (shown(cur)) st.chatRead(t.id, side);
-    return `<div class="pp chatp"><div class="pback" data-act="p" data-s="chats">${I("back")}${T.t("ch_title")}</div>
-      <div class="phead"><div><small>${E(x.kind)} · ${E(x.code)} ${E(x.name)}</small><h2>${E(x.id)}</h2></div>${stg(3)}</div>
-      <p class="phint">${side === "ru" ? T.t("ch_side") : T.t("ch_side_wh")}</p>
-      <div class="pmsgs">${t.msgs.map((m) => C.bubble(m, side)).join("") || empty(T.t("ch_empty"))}</div>
-      <div class="plabel">${T.t("ch_quick")}</div><div class="chat-q" data-hl="chat-q">${C.phrases(side, t.id)}</div>
-      <div class="chat-i"><input class="inp" data-in="pchat" placeholder="${T.t("ch_ph")}" value="${E(App.tmp.ptext[cur] || "")}" data-enter='[data-f="psend"]' autocomplete="off"><button class="btn pri" type="button" data-f="psend" data-act="chatSend" data-tid="${E(t.id)}" data-side="${side}" aria-label="${T.t("ch_send")}">${I("send")}</button></div>
-    </div>`;
-  }
-  st.on("chat", ({ t, m }) => {
-    const P = App.i18n.PHRASE;
-    App.ui.slots.forEach((s, i) => {
-      if (!shown(i)) return;
-      const side = zhRole(s.role) ? "zh" : null;
-      if (!side || side === m.side || (s.role === "warehouse" && s.wh !== t.wh) || (s.screen === "chat" && s.p === t.id)) return;
-      App.showPush(i, App.i18n.of(side === "zh" ? s.lang : "ru").t("ch_new") + " · " + st.who(m.by, side), m.k ? P[m.k][side] : m.text, ["chat", t.id]);
-    });
-    if (m.side === "zh" && App.ui.mode === "admin" && App.ui.desk !== "chat") App.dpush("Новое сообщение · " + st.who(m.by) + ", склад " + st.wh(t.wh).ru, m.k ? P[m.k].ru : m.text, ["chat", t.id]);
-  });
-
   // ================= КЛИЕНТ =================
   const clientHead = (t, right) => { const c = st.client(ME); return head(t, E(c.name) + " · " + E(c.id), right); };
   const PKG = (k) => App.i18n.of("ru").t("pk_" + k);
+  // статус отправки у клиента: в пути, прибыл в Москву (хранение, готов к выдаче, выдают), выдан или передан в ТК
+  const wayT = (o) => st.WAY[o.way].t + (o.way === "tk" && o.tk ? ": " + o.tk : "");
+  const shipLabel = (s) => (s.status === "done" ? (s.issue && s.issue.type === "tk" ? "Передан в ТК" : "Выдан") : s.status === "arrived" && s.sub !== "store" && st.SUB[s.sub] ? st.SUB[s.sub] : null);
+  const shipPill = (s) => pill(s.status, shipLabel(s));
+  function shipSub(s) {
+    const o = st.issueOf(s);
+    if (s.status === "way") return "Прибытие около " + u.dLong(s.eta);
+    if (s.status === "arrived") return s.sub === "ready" && o ? "Готов к выдаче: " + E(wayT(o).toLowerCase()) : s.sub === "issuing" && o ? "Выдают: " + E(wayT(o).toLowerCase()) : "Прибыл в Москву, на хранении";
+    return s.issue && s.issue.type === "tk" ? "Передан в " + E(s.issue.tk) + " " + u.dShort(s.doneAt) + ", накладная " + E(s.issue.waybill) : "Выдан " + u.dShort(s.doneAt);
+  }
   function ships(p) {
     const tab = p === "archive" ? "archive" : "active", S = st.S;
     const sh = S.ships.filter((s) => s.clientId === ME), act = sh.filter((s) => s.status !== "done").sort((a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0) || b.sentAt - a.sentAt), arc = sh.filter((s) => s.status === "done").sort((a, b) => b.doneAt - a.doneAt);
     const cg = st.ready().filter((c) => c.clientId === ME).sort((a, b) => b.at - a.at), rc = st.S.receipts.filter((r) => r.clientId === ME && !r.cargoId).sort((a, b) => b.at - a.at), ex = S.expected.filter((e) => e.clientId === ME);
     const debt = st.money(ME).debt, nAct = act.length + cg.length + rc.length;
     const bell = `<button class="x soft" type="button" data-act="notes" aria-label="Уведомления">${I("bell")}</button>`;
-    const shipC = (s) => { const t = st.totals(s); return `<button class="pcard${s.fresh ? " new" : ""}" type="button" data-act="p" data-s="citem" data-p="ship:${E(s.id)}" data-ci="ship:${E(s.id)}"><span class="t"><span class="id tt">${E(s.id)}</span>${pill(s.status, s.status === "done" && s.issue && s.issue.type === "tk" ? "Передан в ТК" : null)}</span><span class="m"><span>${u.places(t.places)}</span><span>${u.kg(t.weight)}</span><span>${u.vol(t.volume)}</span></span><span class="sub">${s.status === "way" ? "Прибытие около " + u.dLong(s.eta) : s.status === "arrived" ? "Прибыла в Россию, готовим к выдаче" : s.issue && s.issue.type === "tk" ? "Передана в " + E(s.issue.tk) + " " + u.dShort(s.doneAt) : "Выдана " + u.dShort(s.doneAt)} · ${u.usd(s.cost)}, ${st.isPaid(s) ? "оплачено" : "не оплачено"}</span></button>`; };
+    const shipC = (s) => { const t = st.totals(s); return `<button class="pcard${s.fresh ? " new" : ""}" type="button" data-act="p" data-s="citem" data-p="ship:${E(s.id)}" data-ci="ship:${E(s.id)}"><span class="t"><span class="id tt">${E(s.id)}</span>${shipPill(s)}</span><span class="m"><span>${u.places(t.places)}</span><span>${u.kg(t.weight)}</span><span>${u.vol(t.volume)}</span></span><span class="sub">${shipSub(s)} · ${u.usd(s.cost)}, ${st.isPaid(s) ? "оплачено" : "не оплачено"}</span></button>`; };
     const list = tab === "archive" ? arc.map(shipC).join("") : act.map(shipC).join("")
       + cg.map((c) => `<button class="pcard${c.fresh ? " new" : ""}" type="button" data-act="p" data-s="citem" data-p="cargo:${E(c.id)}" data-ci="cargo:${E(c.id)}"><span class="t"><span class="id tt">${E(c.id)}</span>${pill("pack")}</span><span class="photos">${c.photos.slice(0, 1).map((x) => `<span class="ph-i">${u.photo(x, c.packType)}</span>`).join("")}${c.receiptIds.slice(0, 2).map((id) => `<span class="ph-i">${u.photo(st.rec(id).photos[0])}</span>`).join("")}</span><span class="m"><span>${u.places(c.places)}</span><span>${u.kg(c.weight)}</span><span>${u.vol(c.volume)}</span></span><span class="sub">${c.sent ? "На складе " + st.left(c) + " из " + c.places + " мест, остальные уже едут" : "Ждёт отправки, склад " + E(st.wh(c.wh).ru)}</span></button>`).join("")
       + rc.map((r) => `<button class="pcard${r.fresh ? " new" : ""}" type="button" data-act="p" data-s="citem" data-p="rec:${E(r.id)}" data-ci="rec:${E(r.id)}"><span class="t"><span class="id">${dmgI(r)}${E(r.id)}</span>${pill(r.taskId ? "packing" : "in")}</span><span class="photos">${r.photos.slice(0, 3).map((x) => `<span class="ph-i">${u.photo(x)}</span>`).join("")}</span><span class="m"><span>${u.places(r.places)}</span><span>${E(r.supplier)}</span></span><span class="sub">Принят ${u.when(r.at)}, склад ${E(st.wh(r.wh).ru)}${r.damage ? ". Есть повреждение" : ""}</span></button>`).join("")
       + (ex.length ? `<button class="pcard" type="button" data-act="p" data-s="await"><span class="t"><span class="id">Ждём на складе: ${ex.length}</span>${pill("wait")}</span><span class="sub">${ex.map((e) => E(e.track)).join(", ")}</span></button>` : "");
     return `<div class="pp">${clientHead("Мои грузы", bell)}
       ${debt > 0.5 ? `<button class="pcard warnc" type="button" data-act="p" data-s="pay"><span class="t"><span class="strong">Не оплачено ${u.usd(debt)}</span>${I("chevron")}</span></button>` : ""}
-      <div class="opts-row">${optBtn("clientChat", "Написать менеджеру")}</div>
       <div class="pseg"><button type="button" class="${tab === "active" ? "on" : ""}" data-act="p" data-s="ships">Активные · ${nAct}</button><button type="button" class="${tab === "archive" ? "on" : ""}" data-act="p" data-s="ships" data-p="archive">Архив · ${arc.length}</button></div>
       ${list || empty("Здесь пока пусто.")}
     </div>`;
@@ -351,14 +330,26 @@
     }
     const s = st.ship(id); if (!s || s.clientId !== ME) return ships();
     const x = st.totals(s), rest = s.items.reduce((a, y) => a + st.left(st.cargo(y.cargoId)), 0), all = s.items.reduce((a, y) => a + st.cargo(y.cargoId).places, 0);
-    const iss = s.issue ? (s.issue.type === "tk" ? "Передана в " + E(s.issue.tk) + ", накладная " + E(s.issue.waybill) : "Выдана") : "";
-    return `<div class="pp">${back}<div class="phead"><div><small>Отправка · маршрут ${E(s.route)} · ${E(st.TRANSPORT[s.transport].t)}</small><h2>${E(s.id)}</h2></div>${pill(s.status, s.status === "done" && s.issue && s.issue.type === "tk" ? "Передан в ТК" : null)}</div>
-      <div class="pcard track" data-hl="client-track"><div class="t"><span class="muted s12">Трек-номер</span><span class="muted s12">${s.status === "way" ? "прибытие" : s.status === "arrived" ? "прибыла" : "выдана"}</span></div><div class="t"><span class="id big tt">${E(s.id)}</span><span class="strong">${s.status === "way" ? "≈" + u.NB + u.dLong(s.eta) : u.dLong(s.status === "arrived" ? s.arrivedAt : s.doneAt)}</span></div>
+    const o = st.issueOf(s), tk = s.issue && s.issue.type === "tk", cg = st.cargo(s.id), stTxt = { way: "прибытие", arrived: "прибыл", done: tk ? "передан в ТК" : "выдан" }[s.status];
+    const iss = s.issue ? (tk ? "Передан в ТК " + E(s.issue.tk) + ", накладная " + E(s.issue.waybill) : s.issue.way === "door" ? "Выдан: доставлен до двери" : "Выдан") : "";
+    // выдача: получатель, способ, к оплате; после выдачи кратко фотоотчёт склада
+    const recv = o ? line("Получатель", (E(o.recv.name) || "не указан") + (o.recv.phone ? "<small>" + E(o.recv.phone) + "</small>" : "")) + (o.recv.addr && o.way !== "pickup" ? line("Адрес", E(o.recv.addr)) : "") + line("Способ выдачи", E(wayT(o))) : "";
+    const due = o && o.status !== "done" ? st.issueRest(o) : 0;
+    const issueCard = s.status === "arrived" && o ? `<div class="pcard cmd" data-hl="client-issue"><div class="plabel">${I("bell")}${s.sub === "issuing" ? "Склад выдаёт груз" : "Готов к выдаче"}</div>${recv}${due > 0 ? line("К оплате при выдаче", st.rub(due)) : ""}</div>`
+      : s.status === "arrived" ? `<div class="pcard"><div class="plabel">${I("wh")}На хранении в Москве</div><p class="muted s13 p0">Груз на складе. Сообщим, когда он будет готов к выдаче.</p></div>` : "";
+    const r = s.rep, xs = r ? st.REPX.filter(([k]) => r.exp[k] > 0) : [];
+    const repCard = s.status === "done" && r ? `<div class="pcard" data-hl="client-rep"><div class="plabel">${I("camera")}Фотоотчёт склада</div>${r.photos.length ? `<div class="photos">${r.photos.slice(0, 3).map((p) => `<button class="ph-i" type="button" data-act="zoom" data-p="${p}" data-kind="${cg ? cg.packType : ""}">${u.photo(p, cg ? cg.packType : undefined)}</button>`).join("")}</div>` : ""}${recv}${tk ? line("Накладная", `<span class="mono">${E(s.issue.waybill)}</span>`) : ""}${line("Повреждение", r.damage ? `<span class="bad">${E(r.damage)}</span>` : "нет")}${s.issueExpRub ? line("Расходы при выдаче", st.rub(s.issueExpRub) + "<small>добавлены к стоимости</small>") : xs.length ? line("Расходы при выдаче", "оплатила компания") : ""}${line(tk ? "Передал" : "Выдал", E(st.who(r.by)) + "<small>" + u.dShort(r.at) + " · " + u.hm(r.at) + "</small>")}</div>` : "";
+    return `<div class="pp">${back}<div class="phead"><div><small>Отправка · маршрут ${E(s.route)} · ${E(st.TRANSPORT[s.transport].t)}</small><h2>${E(s.id)}</h2></div>${shipPill(s)}</div>
+      <div class="pcard track" data-hl="client-track"><div class="t"><span class="muted s12">Трек-номер</span><span class="muted s12">${stTxt}</span></div><div class="t"><span class="id big tt">${E(s.id)}</span><span class="strong">${s.status === "way" ? "≈" + u.NB + u.dLong(s.eta) : u.dLong(s.status === "arrived" ? s.arrivedAt : s.doneAt)}</span></div>
         <div class="sub">${x.places < all ? `Едет ${x.places} из ${all} мест${rest ? ", ещё " + rest + " на складе в Китае" : ""}` : "Маршрут " + E(s.route) + " · " + E(s.dest) + " · " + u.places(x.places)}</div></div>
-      <div class="pcard">${line("Мест", u.places(x.places))}${line("Вес", u.kg(x.weight))}${line("Объём", u.vol(x.volume))}${line("Стоимость", u.usd(s.cost))}${s.doorUsd ? line("в том числе доставка до склада и расходы в Китае", u.cny(s.doorCny) + " = " + u.usd(s.doorUsd)) : ""}${line("Оплата", paidPill(s))}</div>
+      ${issueCard}${repCard}
+      <div class="pcard">${line("Мест", u.places(x.places))}${line("Вес", u.kg(x.weight))}${line("Объём", u.vol(x.volume))}${line("Стоимость", u.usd(s.cost))}${s.doorUsd ? line("в том числе доставка до склада и расходы в Китае", u.cny(s.doorCny) + " = " + u.usd(s.doorUsd)) : ""}${s.issueExpUsd ? line("в том числе расходы при выдаче", st.rub(s.issueExpRub) + " = " + u.usd(s.issueExpUsd)) : ""}${line("Оплата", paidPill(s))}</div>
       <div class="pcard" data-hl="client-docs"><div class="plabel">Документы</div>${s.docs.map((d) => `<div class="pline"><span>${E(d.name)}<small>${u.dShort(d.at)}</small></span><button class="btn sm" type="button" data-act="toast" data-t="В рабочей версии файл скачается: ${E(d.name)}" data-i="download">${I("download")}</button></div>`).join("") || '<p class="muted s13 p0">Документы появятся здесь, когда их прикрепят к отправке.</p>'}</div>
-      <div class="pcard">${tl([[s.status === "way" ? "cur" : "done", "Отправлена из Китая", dt(s.sentAt)], s.arrivedAt ? [s.status === "arrived" ? "cur" : "done", "Прибыла в Россию", dt(s.arrivedAt)] : ["todo", "Прибытие в Россию", "ожидается " + u.dLong(s.eta)], s.doneAt ? ["done", iss, dt(s.doneAt)] : ["todo", "Выдача или передача в транспортную компанию", ""]])}</div>
-      <div class="opts-row">${optBtn("clientChat", "Вопрос по этой отправке")}</div></div>`;
+      <div class="pcard">${tl([[s.status === "way" ? "cur" : "done", "Отправлена из Китая", dt(s.sentAt)],
+        s.arrivedAt ? [s.status === "arrived" && s.sub === "store" ? "cur" : "done", "Прибыл в Москву", dt(s.arrivedAt)] : ["todo", "Прибытие в Москву", "ожидается " + u.dLong(s.eta)],
+        o && s.arrivedAt ? [s.status === "arrived" && s.sub === "ready" ? "cur" : "done", "Готов к выдаче: " + E(wayT(o).toLowerCase()), dt(o.at)] : null,
+        o && o.acceptedAt && s.status !== "way" ? [s.status === "arrived" ? "cur" : "done", "Склад выдаёт груз", dt(o.acceptedAt)] : null,
+        s.doneAt ? ["done", iss, dt(s.doneAt)] : ["todo", "Выдача или передача в транспортную компанию", ""]].filter(Boolean))}</div></div>`;
   }
   function awDraft() { if (!App.tmp.aw) App.tmp.aw = { track: "", supplier: "", what: "" }; return App.tmp.aw; }
   const awOk = (d) => d.track.replace(/\s/g, "").length >= 6;
@@ -379,7 +370,7 @@
     return `<div class="pp">${clientHead("Оплаты")}
       <div class="pay-hero" data-hl="client-pay"><span>${m.debt > 0.5 ? "Не оплачено" : "Всё оплачено"}</span><strong>${u.usd(m.debt)}</strong><button class="btn sm" type="button" data-act="reqs">${I("file")}Реквизиты для оплаты</button></div>
       <div class="pcard"><div class="plabel">Стоимость отправок</div>${list.map((s) => `<div class="pline"><span>${E(s.id)}<small>${u.dShort(s.sentAt)} · ${u.places(st.totals(s).places)}</small></span><span class="rt"><b>${u.usd(s.cost)}</b><small class="${st.isPaid(s) ? "ok" : "bad"}">${st.isPaid(s) ? "оплачено" : s.paidUsd > 0 ? "оплачено " + u.usd(s.paidUsd) : "не оплачено"}</small></span></div>`).join("") || '<p class="muted s13 p0">Отправок пока нет</p>'}</div>
-      <div class="pcard"><div class="plabel">История оплат${stg(2)}</div><p class="muted s12 p0 mb8">Платить можно рублями, юанями, сомами, тенге, USDT или долларами. Сумма пересчитывается в доллары по курсу на день оплаты.</p>${pays.slice(0, 6).map((x) => `<div class="pline"><span>${u.dLong(x.at)}<small>${x.cur === "USD" || x.cur === "USDT" ? st.CUR[x.cur].t : "курс " + u.num(x.rate, 2)}</small></span><span class="rt"><b>${x.cur === "USD" ? u.usd(x.amount) : u.groups(Math.round(x.amount)) + u.NB + st.CUR[x.cur].s}</b><small>${x.cur === "USD" ? "доллары" : "= " + u.usd(x.usd)}</small></span></div>`).join("") || '<p class="muted s13 p0">Оплат пока не было</p>'}</div>
+      <div class="pcard"><div class="plabel">История оплат</div><p class="muted s12 p0 mb8">Платить можно рублями, юанями, сомами, тенге, USDT или долларами. Сумма пересчитывается в доллары по курсу на день оплаты.</p>${pays.slice(0, 6).map((x) => { const ids = x.shipIds || (x.shipId ? [x.shipId] : []); return `<div class="pline"><span>${u.dLong(x.at)}<small>${x.src === "issue" ? "при выдаче в Москве" : x.cur === "USD" || x.cur === "USDT" ? st.CUR[x.cur].t : "курс " + u.num(x.rate, 2)}</small>${ids.length ? `<small class="mono">за ${ids.map(E).join(", ")}</small>` : ""}</span><span class="rt"><b>${x.cur === "USD" ? u.usd(x.amount) : u.groups(Math.round(x.amount)) + u.NB + st.CUR[x.cur].s}</b><small>${x.cur === "USD" ? "доллары" : "= " + u.usd(x.usd)}</small></span></div>`; }).join("") || '<p class="muted s13 p0">Оплат пока не было</p>'}</div>
     </div>`;
   }
   function profile() {
@@ -388,14 +379,13 @@
       <div class="pcard codec"><span class="muted s12">Ваш код клиента</span><b>${E(c.id)}</b><span class="sub">Поставщик пишет его на каждой коробке</span></div>
       <div class="pcard"><div class="plabel">Адреса складов для ваших поставщиков</div>${st.WH.map((w) => `<div class="addr"><b>${E(w.ru)}</b><span>${E(w.addr)}<br>收货人: 中心物流 · 唛头: ${E(c.id)}</span><button class="btn sm" type="button" data-act="toast" data-t="Адрес склада (${E(w.ru)}) скопирован, отправьте его поставщику" data-i="copy" aria-label="Скопировать адрес">${I("copy")}</button></div>`).join("")}</div>
       <div class="pcard"><div class="plabel">Уведомления</div>
-        <div class="pline"><span>В приложении<small>каждый этап: принят, упакован, отправлен, прибыл, выдан</small></span><span class="st" data-st="in">включено</span></div>
-        <div class="pline"><span>Telegram<small>${st.S.tg ? "подключён" : "дублировать уведомления в Telegram"}</small></span>${st.S.tg ? '<span class="st" data-st="in">включено</span>' : '<button class="btn sm" type="button" data-act="tgOn">Подключить</button>'}</div>
-        <div class="pline"><span>Бот «Где мой груз?»<small>статус по коду или трек-номеру</small></span>${optBtn("tgbot", "Подключить")}</div></div>
+        <div class="pline"><span>В приложении<small>каждый этап: принят, упакован, отправлен, прибыл в Москву, готов к выдаче, выдан</small></span><span class="st" data-st="in">включено</span></div>
+        <div class="pline"><span>Telegram<small>${st.S.tg ? "подключён" : "дублировать уведомления в Telegram"}</small></span>${st.S.tg ? '<span class="st" data-st="in">включено</span>' : '<button class="btn sm" type="button" data-act="tgOn">Подключить</button>'}</div></div>
       <div class="pcard">${line("Компания", E(c.name))}${line("Контакт", E(c.person))}${line("Ваш менеджер", E(st.who(c.salesId)))}</div>
     </div>`;
   }
 
-  const S_ = { accept, accepted, stock, stockc, tasks, task, packs, packf, packed, done, donec, report, reportk, chats, chat, ships, citem, await: awaitScreen, pay, profile };
+  const S_ = { accept, accepted, stock, stockc, tasks, task, packs, packf, packed, done, donec, report, reportk, ships, citem, await: awaitScreen, pay, profile };
 
   // ---------- действия ----------
   const A = (fn) => (d, el, e) => { ctx(App.cur); return fn(d, el, e); };
@@ -468,16 +458,15 @@
     packW: (v) => { const t = st.task(slot.p); if (t) packDraft(t).weight = v; dec(); },
     packNote: (v) => { const t = st.task(slot.p); if (t) packDraft(t).note = v; },
     dnQ: (v) => { App.tmp.dn.q = v; const l = q('[data-f="dnList"]'); if (l) l.innerHTML = doneRows(); },
-    pcmdIn: (v, el) => { if (App.tmp.pcmd) App.tmp.pcmd[el.dataset.k] = v; },
     awTrack: (v) => { const d = awDraft(); d.track = v; const b = q('[data-f="awGo"]'); if (b) b.disabled = !awOk(d); dec(); },
     awSup: (v) => { awDraft().supplier = v; },
     awWhat: (v) => { awDraft().what = v; },
-    tkWb: (v) => { const d = App.tmp.issue; if (!d) return; d.waybill = v; dec(); },
-    pchat: (v) => { App.tmp.ptext[cur] = v; },
   };
   // при ручном вводе трека, который клиент внёс заранее, клиент подставляется без потери фокуса в поле трека
   function rr2() { const d = draft(), box = q('[data-ta="acc"] input'), c = d.clientId ? st.client(d.clientId) : null, n = q('[data-f="accNote"]'); if (box) box.value = c ? c.id + " · " + c.name : ""; if (n) { n.innerHTML = clientNote(d); n.classList.toggle("ok", !!d.clientId); } dec(); }
   Object.keys(ins).forEach((k) => { App.ins[k] = (v, el, e) => { ctx(App.cur); return ins[k](v, el, e); }; });
 
-  App.P = { tabs, render, after, has, shown, scanStop };
+  // общие куски разметки для телефона склада в Москве (phone2.js)
+  const kit = { head, line, empty, camHtml, tabBtns, ctx };
+  App.P = { tabs, render, after, has, shown, scanStop, kit };
 })(window.App);

@@ -1,6 +1,6 @@
 /* Сценарий: ведёт по пути груза от трек-номера клиента до выдачи, потом показывает сотрудников и историю действий.
    Затемняет экран, подсвечивает нужный элемент и показывает рядом подсказку «что сделать сейчас».
-   Сам переключает три вкладки: «Администратор», «Склад в Китае», «Клиент». Из сценария можно выйти в любой момент. */
+   Сам переключает четыре вкладки: «Администратор», «Склад в Китае», «Склад в Москве», «Клиент». Из сценария можно выйти в любой момент. */
 (function (App) {
   "use strict";
   const u = App.u, st = App.store, I = u.icon, E = u.esc;
@@ -8,9 +8,9 @@
   const sc = () => App.ui.scn;
   // элемент считается найденным, только если он есть на экране
   const qv = (sel) => { const el = document.querySelector(sel); return el && el.getClientRects().length ? el : null; };
-  const TAB_T = { admin: "Администратор", wh: "Склад в Китае", client: "Клиент" };
+  const TAB_T = { admin: "Администратор", wh: "Склад в Китае", msk: "Склад в Москве", client: "Клиент" };
   const slotOf = (role) => App.slotFor(role);
-  const modeOf = (role) => (role === "client" ? "client" : "wh");
+  const modeOf = (role) => (role === "client" ? "client" : role === "msk" ? "msk" : "wh");
   const ps = (role, sel) => `#ps${slotOf(role)} ${sel}`;
   const tabSel = (m) => `#${App.isMobile() ? "msRoles" : "modeSeg"} [data-mode="${m}"]`;
   function goPhone(role, screen, p) { App.closeDesk(); App.setMode(modeOf(role)); App.go.phone(slotOf(role), screen, p); }
@@ -137,48 +137,109 @@
         if (s.screen === "citem" && s.p === "ship:" + id) return { sel: ps("client", '[data-hl="client-track"]'), tip: "Наш трек-номер, маршрут и дата прибытия. Ниже стоимость в долларах: в неё вошла доставка до склада.", act: "scnNext", actLabel: "Дальше", pri: true };
         return { sel: ps("client", `[data-ci="ship:${id}"]`), tip: "Откройте отправленный груз." };
       } },
-    { k: "arrive", who: ["pin", "Администратор"], t: "Прибытие и выдача",
-      p: "Груз пришёл в Россию. Администратор в «Отправках» отмечает прибытие и выдачу сам. Клиент получает уведомление на каждом шаге.",
-      go: () => { App.tmp.cf = null; goDesk("cons"); },
+    { k: "arrive", who: ["pin", "Администратор"], t: "Груз прибыл в Москву",
+      p: "Груз пришёл на склад в Москве. Администратор в «Отправках» отмечает прибытие: груз ложится на хранение, клиент получает уведомление.",
+      go: () => { App.tmp.ctab = "way"; goDesk("cons"); },
       hint: () => {
         const n = needDesk("cons", "Отправки"); if (n) return n;
         const id = sc().ttId, sh = st.ship(id); if (!sh) return null;
-        if (cardOf(id)) {
-          if (sh.status === "way") return { sel: "#btnCardNext", tip: "Груз пришёл. Нажмите «Прибыл в Россию»: клиент получит уведомление." };
-          return { sel: '#modal [data-hl="iss-box"]', tip: "Теперь выдача. Выдайте груз клиенту или передайте в транспортную компанию с номером накладной, подойдёт любой вариант.", act: "issFill", actLabel: "Передать в СДЭК за меня" };
-        }
+        if (cardOf(id) && sh.status === "way") return { sel: "#btnCardNext", tip: "Нажмите «Прибыл в Москву»: груз ляжет на хранение, клиент получит уведомление." };
         if (App.modalOpen()) return closeTip();
-        return { sel: `[data-sh="${id}"]`, tip: "В «Отправках» есть поиск и фильтры по маршруту, статусу и датам. Откройте нашу отправку." };
+        if (App.tmp.ctab !== "way") return { sel: '[data-ctab="way"]', tip: "Откройте вкладку «В пути»." };
+        return { sel: `[data-sh="${id}"] [data-arr]`, tip: "Во вкладке «В пути» поиск и фильтры. Наш груз пришёл: нажмите «Прибыл»." };
       } },
-    { k: "staff", who: ["shield", "Администратор"], t: "Сотрудник и его доступ",
-      p: "Отдельных кабинетов нет. Администратор сам создаёт сотрудника, выбирает набор прав и сразу проверяет результат: входит под сотрудником и видит систему его глазами.",
+    { k: "issue", who: ["send", "Администратор"], t: "Команда «Выдать» на несколько треков",
+      p: "Во вкладке «Прибывшие» слева коды клиентов, справа партии карточками: фото упаковки, вес, объём, подстатус. Администратор отмечает треки одного клиента и даёт команду «Выдать»: получатель, способ выдачи, получить оплату.",
+      go: () => { App.tmp.ctab = "arr"; App.tmp.acode = st.ME; App.tmp.asub = "all"; goDesk("cons"); },
+      hint: () => {
+        const n = needDesk("cons", "Отправки"); if (n) return n;
+        const id = sc().ttId, o = st.arrived("store").find((x) => x.clientId === st.ME && x.id !== id);
+        if (App.modalOpen()) {
+          if (App.tmp.mk !== "iss") return closeTip();
+          if (!(App.tmp.iss || {}).picked) return { sel: '#modal [data-hl="iss-collect"]', tip: "Получатель и адрес подставились из карточки клиента, адрес можно скопировать. Сумма к получению при выдаче подставлена по долгу за выбранные треки.", act: "issFill", actLabel: "Заполнить за меня" };
+          return { sel: "#btnIssueGo", tip: "Нажмите «Готово»: заказ на выдачу уйдёт складу в Москве, клиент получит уведомление." };
+        }
+        if (App.tmp.ctab !== "arr") return { sel: '[data-ctab="arr"]', tip: "Откройте вкладку «Прибывшие»." };
+        if (App.tmp.acode !== st.ME) return { sel: `[data-acode="${st.ME}"]`, tip: "Слева коды клиентов с числом партий. Нажмите на D051." };
+        const sel = App.tmp.asel || [];
+        if (!sel.includes(id)) return { sel: `[data-ag="${id}"] [data-act="aSel"]`, tip: "Сверху общий вес и объём партий клиента. Отметьте наш груз, он на хранении." };
+        if (o && !sel.includes(o.id)) return { sel: `[data-ag="${o.id}"] [data-act="aSel"]`, tip: "И ещё одну партию этого клиента: выдадим их вместе." };
+        return { sel: "#btnIssue", tip: "Внизу итог по выбранным трекам. Нажмите «Выдать»." };
+      } },
+    { k: "maccept", who: ["wh", "Склад в Москве"], t: "Склад в Москве принимает выдачу",
+      p: "Это телефон склада в Москве. В разделе «Готов к выдаче» коды клиентов с заказами: получатель, адрес, способ выдачи, сколько получить с клиента.",
+      go: () => { App.tmp.mtab = "ready"; goPhone("msk", "mcode", "ready:" + st.ME); },
+      hint: () => {
+        const n = needPhone("msk", ["mgoods", "mcode"], "mgoods", "Грузы"); if (n) return n;
+        const s = App.ui.slots[2], oid = sc().issId;
+        if (s.screen === "mgoods") {
+          if (App.tmp.mtab !== "ready") return { sel: ps("msk", '[data-act="mTab"][data-k="ready"]'), tip: "Откройте раздел «Готов к выдаче»." };
+          return { sel: ps("msk", `[data-mcode="${st.ME}"]`), tip: "Сверху сводка: что приехало сегодня. Нажмите на D051: для него есть команда «Выдать»." };
+        }
+        return { sel: ps("msk", `[data-act="mAccept"][data-id="${oid}"]`), tip: "Видно получателя, адрес с кнопкой «копировать», способ выдачи и сумму к получению. Нажмите «Принят»: выдача перейдёт в работу." };
+      } },
+    { k: "mrep", who: ["camera", "Склад в Москве"], t: "Фотоотчёт и выдача",
+      p: "Во вкладке «Фотоотчёт» треки в работе по заказам. Склад отмечает полученную оплату, по треку делает фото, отмечает повреждения и расходы и нажимает «Готово». Груз уходит в архив.",
+      go: () => goPhone("msk", "mrep"),
+      hint: () => {
+        const n = needPhone("msk", ["mrep", "mtrack"], "mrep", "Фотоотчёт"); if (n) return n;
+        const s = App.ui.slots[2], id = sc().ttId, o = st.issueOrder(sc().issId || "");
+        if (App.sheetOpen(2)) return { sel: "#mPaidDone", tip: "Оплата ещё не отмечена. Нажмите «Получено, выдать»." };
+        if (s.screen === "mrep") {
+          if (o && st.issueRest(o) > 0) return { sel: ps("msk", `[data-rord="${o.id}"] [data-hl="m-paid"]`), tip: "Клиент заплатил при выдаче. Нажмите «Получено»: сумма попадёт в «Финансы» и закроет долг клиента." };
+          return { sel: ps("msk", `[data-mtr="${id}"]`), tip: "Откройте наш трек." };
+        }
+        if (s.p !== id) return { sel: ps("msk", '[data-tab="mrep"]'), tip: "Вернитесь к списку «Фотоотчёт»." };
+        const d = (App.tmp.mrep || {})[id] || { photos: [] };
+        if (!(d.photos || []).length) return { sel: ps("msk", '[data-act="mrepPhoto"]'), tip: "Сфотографируйте груз при выдаче, отметьте повреждение и расходы в рублях. Ни одно поле не обязательно.", act: "mrepFill", actLabel: "Заполнить за меня", slot: 2 };
+        return { sel: ps("msk", '[data-hl="m-done"]'), tip: "Нажмите «Готово»: груз выдан, клиент получит уведомление. Вторую партию склад выдаст так же." };
+      } },
+    { k: "cdone", who: ["user", "Клиент"], t: "Клиент видит, что груз выдан",
+      p: "Клиенту пришли уведомления на каждом шаге: прибыл в Москву, готов к выдаче, выдан. В карточке груза способ выдачи и фотоотчёт склада.",
+      go: () => goPhone("client", "citem", "ship:" + sc().ttId), manual: true,
+      hint: () => {
+        const n = needPhone("client", ["citem", "ships"], "ships", "Грузы"); if (n) return n;
+        const s = App.ui.slots[1], id = sc().ttId;
+        // после выдачи карточка выдачи сменяется фотоотчётом склада
+        if (s.screen === "citem" && s.p === "ship:" + id) return { sel: ps("client", (st.ship(id) || {}).status === "done" ? '[data-hl="client-rep"]' : '[data-hl="client-issue"]'), tip: "Груз выдан: видно, как и когда, и фото склада при выдаче.", act: "scnNext", actLabel: "Дальше", pri: true };
+        return { sel: ps("client", `[data-ci="ship:${id}"]`), tip: "Откройте выданный груз." };
+      } },
+    { k: "mfin", who: ["wallet", "Склад в Москве"], t: "Финансы склада в Москве", manual: true,
+      p: "Взаиморасчёты компании со складом в Москве в рублях и долларах. Оплата клиента при выдаче уже в операциях, баланс пересчитан. Расходы за куб и маршрут склад добавляет сам.",
+      go: () => goPhone("msk", "mfin"),
+      hint: () => {
+        const n = needPhone("msk", ["mfin"], "mfin", "Финансы"); if (n) return n;
+        return { sel: ps("msk", '[data-mbal="RUB"]'), tip: "Два баланса: в рублях и в долларах, каждый может быть в плюсе или в минусе. Ниже фильтр по периоду и все операции, сверху оплата клиента при выдаче.", act: "scnNext", actLabel: "Дальше", pri: true };
+      } },
+    { k: "staff", who: ["shield", "Администратор"], t: "Менеджер по продажам и его доступ",
+      p: "Администратор сам создаёт сотрудника и выбирает набор прав. Менеджер по продажам видит только своих клиентов, может организовать упаковку их грузов, маршрут ему не показывается.",
       go: () => goDesk("staff"),
       hint: () => {
-        if (App.ui.mode === "admin" && App.ui.viewAs) return { sel: "#btnViewBack", tip: "Так систему видит новый сотрудник: в меню только открытые ему разделы. Полоса сверху напоминает, под кем вы вошли. Нажмите «Вернуться к администратору».", side: "b" };
+        if (App.ui.mode === "admin" && App.ui.viewAs) return { sel: "#btnViewBack", tip: "Так систему видит менеджер по продажам: только свои клиенты, без маршрута и без «Отправок». Полоса сверху напоминает, под кем вы вошли. Нажмите «Вернуться к администратору».", side: "b" };
         const n = needDesk("staff", "Сотрудники и доступы"); if (n) return n;
         if (App.modalOpen()) {
           if (App.tmp.mk !== "staff") return closeTip();
           const d = App.tmp.nst || {};
           if (!String(d.name || "").trim()) return { sel: '#modal [data-hl="nst-name"]', tip: "Введите имя, логин и пароль нового сотрудника.", act: "nstFill", actLabel: "Заполнить за меня" };
-          if (!d.preset) return { sel: '#modal [data-hl="nst-preset"]', tip: "Выберите набор прав одной кнопкой: кладовщик, менеджер или бухгалтер. Разделы ниже можно поправить вручную." };
+          if (d.preset !== "sales") return { sel: '#modal [data-hl="nst-preset"]', tip: "Выберите набор «как менеджер по продажам». Разделы ниже можно поправить вручную." };
           return { sel: "#btnNstGo", tip: "Нажмите «Создать»." };
         }
         if (!sc().staffId) return { sel: "#btnNewStaff", tip: "Вы сами создаёте сотрудника и задаёте, что он видит. Нажмите «Новый сотрудник»." };
         if (App.tmp.staffSel !== sc().staffId) return { sel: `[data-stf="${sc().staffId}"]`, tip: "Выберите нового сотрудника в списке." };
-        return { sel: "#btnViewAs", tip: "Сотрудник создан: ниже простым текстом написано, что он видит. Нажмите «Войти под этим сотрудником» и посмотрите на систему его глазами." };
+        return { sel: "#btnViewAs", tip: "Ниже простым текстом написано, что он видит. Нажмите «Войти под этим сотрудником»." };
       } },
     { k: "history", who: ["history", "Администратор"], t: "История действий", manual: true,
-      p: "Кто что добавил, изменил и удалил: приёмка, упаковка, отправка, выдача, доступы. Лента фильтруется по сотруднику и по грузу.",
+      p: "Кто что добавил, изменил и удалил: приёмка, упаковка, отправка, прибытие, команда на выдачу, выдача, оплаты, доступы. Лента фильтруется по сотруднику и по грузу.",
       go: () => { if (App.ui.desk !== "history") App.tmp.hist = { who: "all", q: "", all: false }; goDesk("history"); },
       hint: () => {
         const n = needDesk("history", "История действий"); if (n) return n;
         const id = sc().ttId;
-        if (App.tmp.hist.q !== id) return { sel: '[data-hl="hist-q"]', tip: "Каждое действие записано: кто, когда, что сделал. Сверху только что созданный сотрудник. Отфильтруем ленту по нашему грузу.", act: "histCargo", actLabel: "Показать историю груза", data: { q: id }, side: "b" };
-        return { sel: '[data-hl="hist-t"]', tip: "Весь путь одного груза: приёмка, организация упаковки, сборка, упаковка, отправка, прибытие, выдача. И видно, кто это сделал.", act: "scnNext", actLabel: "Дальше", pri: true };
+        if (App.tmp.hist.q !== id) return { sel: '[data-hl="hist-q"]', tip: "Каждое действие записано: кто, когда, что сделал. Отфильтруем ленту по нашему грузу.", act: "histCargo", actLabel: "Показать историю груза", data: { q: id }, side: "b" };
+        return { sel: '[data-hl="hist-t"]', tip: "Весь путь одного груза: приёмка, упаковка, отправка, прибытие в Москву, команда «Выдать», «Принят», оплата, выдача. И видно, кто это сделал.", act: "scnNext", actLabel: "Дальше", pri: true };
       } },
-    { k: "end", who: ["spark", "Готово"], t: "Это первый этап целиком",
-      p: "Вы прошли путь груза от трек-номера до выдачи. В «Что входит» собраны три этапа и опции. Этапы 2 и 3 помечены в меню, их тоже можно открыть.",
-      go: () => goDesk("included"), final: true, hint: () => null },
+    { k: "end", who: ["spark", "Готово"], t: "Путь груза пройден целиком",
+      p: "Вы прошли путь груза от трек-номера клиента до выдачи в Москве. Дальше можно свободно осматривать все четыре вкладки: «Сбросить демо» вернёт данные к исходным.",
+      go: () => goDesk("board"), final: true, hint: () => null },
   ];
   const N = STEPS.length - 1;
 
@@ -342,7 +403,10 @@
     if (k === "collect" && ev === "collected" && data.id === s.ttId) { next(1700); return; }
     if (k === "pack" && ev === "packed" && data.id === s.ttId) { next(1900); return; }
     if (k === "send" && ev === "dispatched" && data.id === s.ttId) { next(2000); return; }
-    if (k === "arrive" && ev === "issued" && data.id === s.ttId) { next(2200); return; }
+    if (k === "arrive" && ev === "arrived" && data.id === s.ttId) { next(1900); return; }
+    if (k === "issue" && ev === "issuecmd" && data.shipIds.includes(s.ttId)) { s.issId = data.id; App.saveUI(); next(1900); return; }
+    if (k === "maccept" && ev === "issueacc" && data.id === s.issId) { next(1700); return; }
+    if (k === "mrep" && ev === "issued" && data.id === s.ttId) { next(2000); return; }
     if (k === "staff" && ev === "staffNew") { s.staffId = data; App.saveUI(); }
     if (k === "staff" && ev === "viewAs") { s.seen = true; App.saveUI(); }
     if (k === "staff" && ev === "viewBack" && s.seen) { next(900); return; }
@@ -354,8 +418,8 @@
 
   function start() {
     App.closeOverlay(); App.ui.introSeen = true;
-    const s = sc(); s.on = true; s.step = 0; s.track = null; s.recId = null; s.ttId = null; s.staffId = null; s.seen = false; App.ui.viewAs = null;
-    App.tmp.acc = null; App.tmp.aw = null; App.tmp.csel = []; App.tmp.psel = []; App.tmp.org = null; App.tmp.snd = null; App.tmp.nst = null; App.tmp.wq = ""; scrolledFor = ""; pending = false;
+    const s = sc(); s.on = true; s.step = 0; s.track = null; s.recId = null; s.ttId = null; s.staffId = null; s.issId = null; s.seen = false; App.ui.viewAs = null;
+    App.tmp.acc = null; App.tmp.aw = null; App.tmp.csel = []; App.tmp.psel = []; App.tmp.org = null; App.tmp.snd = null; App.tmp.nst = null; App.tmp.wq = ""; App.tmp.asel = []; App.tmp.iss = null; App.tmp.mrep = {}; scrolledFor = ""; pending = false;
     App.saveUI(); goStep(0);
   }
   function stop(silent) {
@@ -372,6 +436,9 @@
     scnNext: () => goStep(sc().step + 1),
     scnEnd: () => { const fin = STEPS[sc().step].final; stop(fin); if (fin) App.toast("Спасибо! Дальше можно осматриваться самостоятельно", "check"); },
   });
+
+  // события прибытия и выдачи берём прямо из данных: кто бы ни нажал кнопку (администратор или склад), шаг засчитывается
+  ["arrived", "issuecmd", "issueacc", "issued"].forEach((ev) => st.on(ev, (x) => setTimeout(() => check(ev, x), 0)));
 
   App.scenario = {
     init() { if (sc().on && sc().step > 1 && !st.rec(sc().recId || "")) sc().on = false; dock(); setTimeout(decorate, 300); requestAnimationFrame(loop); },

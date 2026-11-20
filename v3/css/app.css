@@ -1080,7 +1080,9 @@ span.sw{display:inline-block}
 .dt .inp{width:140px}
 /* телефон склада: пять вкладок */
 .pseg.two{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:rgba(15,27,45,.06);border-radius:14px}
-.pseg.two button{height:36px;border-radius:10px;box-shadow:none;background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.pseg.two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+/* на маленьком телефоне (окно 1280×720) подпись переносится на вторую строку, а не вылезает за экран */
+.pseg.two button{height:36px;border-radius:10px;box-shadow:none;background:transparent;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding:0 6px;white-space:normal;line-height:1.1;text-align:center}
 .pseg.two button.on{background:var(--white);color:var(--ink);box-shadow:var(--sh-1)}
 .pseg.two .ic{width:16px;height:16px}
 .hr{display:inline-flex;align-items:center;gap:6px;flex:none;margin-bottom:3px}
@@ -1131,4 +1133,211 @@ button.ph-i{padding:0;cursor:zoom-in}
   .ttf-r .btn{flex:1 1 100%}
   .cg-h .btn{flex:1 1 100%}
   .cg-l{grid-template-columns:minmax(0,1fr)}
+}
+
+/* ===== версия 3.1: администратор (отправки, прибывшие, выдача, архив, клиенты, деньги) ===== */
+/* доска: метка подстатуса у прибывших */
+.sc .subm{justify-self:start;max-width:100%;font-size:10.5px;font-weight:600;line-height:1.25;border-radius:8px;padding:3px 7px;margin-top:5px;color:#5d6b7e;background:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc .subm[data-sub=ready]{color:var(--accent-d);background:var(--accent-soft)}
+.sc .subm[data-sub=issuing]{color:#a35a04;background:var(--warn-soft)}
+/* «Прибывшие»: итог по клиенту, фильтр подстатуса, карточки треков */
+.ar-tot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ar-tot>div{display:grid;gap:1px;min-width:0;padding:9px 12px;border-radius:14px;background:var(--white);box-shadow:var(--sh-1),0 0 0 1px var(--line-2)}
+.ar-tot small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar-tot b{font-size:17px;font-weight:700;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ar-f{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.ar-f .seg{max-width:100%;overflow-x:auto;scrollbar-width:none}
+.ar-f .seg::-webkit-scrollbar{display:none}
+.ar-f .seg b{font-size:11px;font-weight:700;padding:1px 6px;border-radius:999px;background:rgba(15,27,45,.08);margin-left:2px}
+.ar-f .seg button.on b{background:rgba(5,148,109,.16)}
+.gc.ac{grid-template-rows:auto 1fr auto}
+.gc-b.one{grid-template-columns:minmax(0,1fr);padding-right:12px;transition:background .15s}
+.gc-b.one:hover{background:var(--soft-2)}
+.ac-st{display:flex;margin-top:5px;min-width:0}
+.ac-o{display:flex;align-items:center;gap:8px;padding:8px 12px 10px;border-top:1px solid var(--line-2);min-width:0}
+.ac-o small{font-size:11.5px;color:var(--muted)}
+.ar .wk-foot .wk-n.muted{font-weight:500;font-size:12.5px}
+.cons-f .search{flex:1 1 240px}
+/* окно «Выдать» */
+.fld>span.row{display:flex}
+.iss-pay{padding:12px 14px;border-radius:14px;background:var(--soft-2)}
+.iss-pay .inp{background:var(--white)}
+.swr{display:flex;align-items:center;gap:12px;min-width:0}
+.swr>span{flex:1;min-width:0}
+.swr b{display:block;font-size:13.5px;font-weight:600}
+.swr small{display:block;font-size:12px;color:var(--muted)}
+.found .btn{margin-left:auto}
+/* карточка заказа на выдачу */
+/* подзаголовок карточки заказа: код, клиент и итог одной строкой текста, переносится как текст, а не столбиком */
+.io-s{display:block;margin-top:4px}
+.io-s .tag{display:inline-flex;vertical-align:middle;height:22px;font-size:11.5px;padding:0 8px;margin-right:6px}
+.modal .mh>.st{margin-top:8px}
+.io-l{display:grid;gap:8px}
+.io-tr{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:6px 10px 6px 6px;border-radius:14px;background:var(--soft-2);box-shadow:0 0 0 1px var(--line-2);min-width:0}
+.io-tb{flex:1 1 240px;display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:center;text-align:left;min-width:0;border-radius:10px}
+.io-tb:hover .mono{color:var(--accent-d)}
+.io-a{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+.io-g{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px;align-items:start}
+.io-g .box h3{font-size:14px;margin-bottom:10px}
+.io-g .box h3 .ic{color:var(--muted)}
+/* фотоотчёт и выдача */
+.rep-k{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.rep-k>div{display:grid;gap:1px;min-width:0;padding:8px 12px;border-radius:12px;background:var(--accent-soft)}
+.rep-k small{font-size:11.5px;color:var(--accent-d);opacity:.8}
+.rep-k b{font-size:17px;color:var(--accent-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.modal .note b{color:var(--ink-2)}
+.mf-l{align-self:center;margin-right:auto}
+/* заглушка «нет разделов» */
+.empty-s{max-width:460px;margin:9vh auto 0;text-align:center;display:grid;justify-items:center;gap:8px}
+.empty-s .mi{width:56px;height:56px;border-radius:18px;background:var(--soft);color:var(--muted);display:grid;place-items:center}
+.empty-s .mi .ic{width:26px;height:26px}
+.empty-s h2{margin:6px 0 0;font-size:21px;letter-spacing:-.02em;line-height:1.2}
+.empty-s p{margin:0;color:var(--muted);font-size:13.5px}
+/* деньги: склад в Москве, оплата за несколько треков, сверка */
+.kpi.good strong{color:var(--accent-d)}
+.wop-f{margin:0 0 14px}
+.pay-l{display:grid;gap:6px;max-height:min(260px,34vh);overflow:auto;align-content:start;padding:2px}
+.pay-l .prow{margin-top:0}
+.pay-l .prow b.nw{font-size:13px}
+.pay-ids{max-width:280px}
+.pay-ids .mono{white-space:nowrap}
+.recon th{position:sticky;top:0;z-index:1}
+.recon td:nth-child(2){min-width:200px}
+.ph-i.dmg{box-shadow:0 0 0 2px var(--alert)}
+
+@container desk (max-width: 1000px){
+  .ar-tot b{font-size:15px}
+}
+@container desk (max-width: 640px){
+  .ar-tot{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ar-tot>div{padding:7px 12px}
+  /* узкий экран: карточка трека строкой, фото слева */
+  .ar .gcs{grid-template-columns:minmax(0,1fr);gap:8px}
+  .gc.ac{grid-template-columns:96px minmax(0,1fr);grid-template-rows:auto auto}
+  .gc.ac>.gc-ph{aspect-ratio:auto;height:auto;min-height:96px}
+  .gc.ac>.gc-ph img{position:absolute;inset:0}
+  .gc.ac .ac-o{grid-column:1/-1}
+  .ar-f .seg{flex:1 1 100%}
+  .wop-f .seg{flex:1 1 100%}
+  .kpi strong.sm{white-space:normal;font-size:15.5px;line-height:1.3}
+  .kpi small{white-space:normal}
+  .mtabs+.ph>div:first-child{flex:1 1 100%}
+  .mtabs+.ph .btn{flex:1 1 auto}
+  .mtabs+.ph .grow{display:none}
+}
+@media(max-width:699px){
+  .modal .tp-packs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .modal .choice.cols3 button .ic{display:none}
+  .rep-k b{font-size:15px}
+  .io-g{grid-template-columns:minmax(0,1fr)}
+  .io-tb{flex-basis:100%}
+  .mf-l{flex:1 1 100%}
+  .modal .row2,.modal .row3{grid-template-columns:minmax(0,1fr)}
+}
+/* конец блока администратора 3.1 */
+
+/* ===== версия 3.1: оболочка из четырёх вкладок и телефоны (склад в Москве, клиент) ===== */
+/* вкладки оболочки: полная подпись на компьютере, короткая на узком экране */
+.seg.mode .ts,.ms-roles .ts{display:none}
+.mdot{position:absolute;top:4px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--alert);box-shadow:0 0 0 2px #fff;opacity:0;transition:opacity .2s;pointer-events:none}
+.mdot.show{opacity:1}
+@media(min-width:700px) and (max-width:1060px){
+  .seg.mode .tl{display:none}
+  .seg.mode .ts{display:inline}
+  .seg.mode button{padding:0 11px}
+}
+@media(min-width:700px) and (max-width:900px){
+  .seg.mode button .ic{display:none}
+}
+@media(max-width:699px){
+  .ms-roles{gap:4px;overflow:visible}
+  .ms-roles button{flex:1 1 0;min-width:0;justify-content:center;padding:0 6px}
+  .ms-roles .tl{display:none}
+  .ms-roles .ts{display:inline;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .ms-roles .dot{position:absolute;top:3px;right:7px;box-shadow:0 0 0 2px #fff}
+  .ms-roles button.on .dot{box-shadow:0 0 0 2px var(--ink)}
+  .ms-roles .mdot{top:3px;right:7px}
+}
+/* один крупный телефон по центру: у каждой вкладки свой слот */
+body[data-mode="wh"] #ps2,body[data-mode="client"] #ps2,body[data-mode="msk"] #ps0,body[data-mode="msk"] #ps1{opacity:0;visibility:hidden;pointer-events:none;transform:translateY(6px);transition:opacity .12s,transform .12s,visibility 0s linear .12s}
+
+/* телефон склада в Москве */
+.mlist{min-height:220px}
+.pcard.mlist{min-height:0}
+.msum .plabel .ic{width:16px;height:16px;color:var(--accent)}
+.msum-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}
+.msum-g span{display:grid;gap:1px;padding:8px 6px;border-radius:12px;background:var(--soft-2);text-align:center;min-width:0}
+.msum-g b{font-size:16px;font-weight:700;letter-spacing:-.02em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msum-g small{font-size:11px;color:var(--muted);white-space:nowrap}
+.pseg.two b.mn{display:inline-grid;place-items:center;min-width:20px;height:18px;padding:0 6px;border-radius:9px;background:rgba(15,27,45,.08);font-size:11px;font-weight:700}
+.pseg.two button.on b.mn{background:var(--accent-soft);color:var(--accent-d)}
+.mtags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mtags:empty{display:none}
+.mgrp{margin-bottom:18px}
+.mgrp>.req{margin-bottom:4px}
+.mgrp>.found{margin-top:2px}
+.mship .mship-b{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:start;margin-top:10px}
+.mship .mship-b>.ph-i{border-radius:10px}
+.mship-d{display:grid;gap:2px;min-width:0}
+.mship-d .strong{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mship-d .m{margin-top:2px}
+.mship-d .sub{margin-top:2px}
+.mord .t{margin-bottom:2px}
+.mord .t .plabel{margin:0;min-width:0}
+.mord>.sub{margin-top:8px}
+.maddr{flex-wrap:nowrap;align-items:flex-start}
+.maddr>span{flex:1}
+.maddr small{color:var(--ink-2)!important;font-weight:500!important;font-size:13px!important;margin-top:2px}
+.pp .lnkb,.psheet .lnkb{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border-radius:9px;background:var(--accent-soft);color:var(--accent-d);font-weight:600;font-size:12.5px;white-space:nowrap;flex:none}
+.pp .lnkb .ic,.psheet .lnkb .ic{width:15px;height:15px}
+.mnote{display:flex;gap:8px;align-items:flex-start;margin-top:10px;padding:9px 11px;border-radius:12px;background:var(--warn-soft);font-size:13px;color:var(--ink-2);overflow-wrap:anywhere}
+.mnote .ic{width:16px;height:16px;color:var(--warn);margin-top:1px}
+.mnote small{display:block;font-size:11.5px;color:var(--muted)}
+.mtot{padding:12px 14px}
+.duo2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.duo2 span{display:grid;gap:1px;min-width:0}
+.duo2 small{font-size:12px;color:var(--muted)}
+.duo2 b{font-size:18px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mph{margin-bottom:10px}
+.mph .ph-i{aspect-ratio:16/10;border-radius:16px}
+.mpay{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);min-height:52px}
+.mpay>span{min-width:0;font-size:12.5px;color:var(--ink-2)}
+.mpay b{display:block;font-size:17px;letter-spacing:-.02em;color:var(--ink);white-space:nowrap}
+.mpay.ok{background:var(--accent-soft)}
+.mpay.ok b{color:var(--accent-d)}
+.mpay.ok>.ic{color:var(--accent);flex:none}
+.mpay.idle{background:var(--soft-2)}
+.mpay.idle>span{color:var(--muted)}
+.mrord>.sub{margin-top:4px}
+.mrord .t .id{white-space:normal}
+.mtr-l{display:grid;gap:6px;margin-top:10px}
+.mtr{display:grid;grid-template-columns:46px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;text-align:left;padding:8px 10px 8px 8px;border-radius:12px;background:var(--soft-2);transition:background .15s}
+button.mtr:hover{background:var(--accent-soft)}
+.mtr .ph-i{border-radius:8px}
+.mtr>span:nth-child(2){min-width:0}
+.mtr b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mtr small{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mtr>.ic{color:var(--faint)}
+.mtr.done{opacity:.7}
+.mtr.done>.ic{color:var(--accent)}
+.mtr .muted .ic{width:16px;height:16px;color:var(--accent)}
+.mexp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.mexp .fld>span{font-size:12px;color:var(--muted)}
+.mbal{margin-bottom:12px}
+.mbal .pcard{margin:0;display:grid;gap:2px;align-content:start}
+.mbal .num{font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mbal .sub{margin-top:0}
+#mWopAdd{margin-bottom:4px}
+/* окно «Добавить расход» в шторке телефона */
+.psheet .choice.cols3 button{padding:8px 4px;font-size:12px;overflow-wrap:anywhere}
+.psheet .choice.cols3 button small{font-size:11px}
+.psheet .choice.cols4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.psheet .choice.cols4 button{justify-content:center;padding:8px 4px}
+.psheet .mh .x{margin-left:auto}
+/* конец блока телефонов 3.1 */
+/* узкий экран: статус в шапке окна уходит на вторую строку, заголовку остаётся вся ширина */
+@media(max-width:699px){
+  .modal .mh{flex-wrap:wrap}
+  .modal .mh>div:nth-child(2){flex:1 1 calc(100% - 120px)}
+  .modal .mh>.st{order:5;margin:-6px 0 0 56px}
 }
