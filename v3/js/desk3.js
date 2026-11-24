@@ -20,8 +20,8 @@
   let photoSeq = 900;
 
   // ---------- «Отправки»: три вкладки ----------
-  const TABS = [["way", "В пути"], ["arr", "Прибывшие"], ["arch", "Архив"]];
-  const tabOk = (k) => (k === "way" ? can("way") : k === "arr" || k === "arch");
+  const TABS = [["way", "В пути"], ["arr", "Прибывшие"], ["arch", "Архив"], ["all", "Все"]];
+  const tabOk = (k) => (k === "way" ? can("way") : k === "arr" || k === "arch" || k === "all");
   // после входа под сотрудником или возврата вкладка начинается заново: без права «way» сразу «Прибывшие»
   // null, а не undefined: иначе первый показ «Отправок» сбрасывает вкладку, заданную заранее (например, сценарием)
   let tabAs = null;
@@ -29,6 +29,8 @@
   const wayAll = () => st.S.ships.filter((s) => s.status === "way" && vis(s));
   const arrAll = () => st.S.ships.filter((s) => s.status === "arrived" && vis(s));
   const archAll = () => st.S.ships.filter((s) => s.status === "done" && vis(s));
+  // «Все» (версия 3.2): все отправки любого статуса в одном списке; без права «way» грузы в пути не видны
+  const allAll = () => st.S.ships.filter((s) => (s.status !== "way" || can("way")) && vis(s));
 
   // «В пути»: поиск, маршрут (если виден), вид доставки, даты отправки
   const cfDef = () => ({ q: "", route: "all", tr: "all", from: "", to: "" });
@@ -124,12 +126,43 @@
       <p class="muted s12 mt8">Нажмите на строку: в карточке груза история после прибытия (хранение, команда на выдачу, расходы, деньги, выдача) и фотоотчёт склада.</p>`;
   }
 
+  // «Все»: статус, поиск, фильтры по статусу, маршруту, виду доставки и датам отправки
+  const ALL_ST = [["way", "В пути"], ["store", "Хранение"], ["ready", "Готов к выдаче"], ["issuing", "Выдают"], ["done", "Выдан"], ["tk", "Передан в ТК"]];
+  const stKey = (s) => (s.status === "way" ? "way" : s.status === "arrived" ? s.sub : wayOf(s) === "tk" ? "tk" : "done");
+  const xfDef = () => ({ q: "", st: "all", route: "all", tr: "all", from: "", to: "" });
+  const xf = () => App.tmp.xf || (App.tmp.xf = xfDef());
+  const statusPill = (s) => (s.status === "arrived" ? K.subPill(s) : s.status === "way" ? K.pill("way") : K.pill("done", false, K.issuedText(s)));
+  function allList() {
+    const f = xf(), q = f.q.trim().toUpperCase(), from = K.fromISO(f.from), to = K.fromISO(f.to), r = K.seeRoute();
+    return allAll().filter((s) => (f.st === "all" || stKey(s) === f.st) && (!r || f.route === "all" || s.route === f.route) && (f.tr === "all" || s.transport === f.tr) && inRange(s.sentAt, from, to)
+      && (!q || [s.id, s.clientId, cname(s.clientId), s.dest, cg(s).name, r ? s.route : "", s.issue && s.issue.waybill].some((x) => String(x || "").toUpperCase().includes(q)))).sort((a, b) => b.sentAt - a.sentAt);
+  }
+  function consAll() {
+    const f = xf(), list = allList(), m = K.seeMoney(), r = K.seeRoute(), dirty = f.q || f.st !== "all" || (r && f.route !== "all") || f.tr !== "all" || f.from || f.to;
+    const sts = ALL_ST.filter(([k]) => k !== "way" || can("way"));
+    const rows = list.map((s) => {
+      const t = st.totals(s), when = s.status === "done" ? ["выдан", s.doneAt] : s.status === "arrived" ? ["прибыл", s.arrivedAt] : ["прибытие ≈", s.eta];
+      return `<tr class="click${s.fresh ? " fresh" : ""}" data-act="openItem" data-t="ship" data-id="${E(s.id)}" data-all="${E(s.id)}"><td><b class="mono">${E(s.id)}</b><div class="muted s12">${E(cg(s).name || "")}</div></td>
+        <td><b>${E(s.clientId)}</b><div class="muted s12">${E(cname(s.clientId))}</div></td><td>${statusPill(s)}</td>
+        <td>${r ? `<b>${E(s.route)}</b> · ` : ""}${E(K.TR(s.transport).t)}<div class="muted s12">${E(s.dest)}</div></td><td>${u.places(t.places)}<div class="muted s12">${u.kg(t.weight)} · ${u.vol(t.volume)}</div></td>
+        <td class="nw">${u.dShort(s.sentAt)}<div class="muted s12">${when[0]}${u.NB}${u.dShort(when[1])}</div></td>
+        ${m ? `<td class="r">${u.usd(s.cost)}<div class="s12 ${st.isPaid(s) ? "ok" : "bad"}">${st.isPaid(s) ? "оплачено" : "не оплачено"}</div></td>` : ""}</tr>`;
+    }).join("");
+    return `<div class="fbar cons-f" data-hl="all-f"><label class="search">${I("search")}<input data-in="xfQ" value="${E(f.q)}" placeholder="Трек, код, клиент, накладная"></label>
+        <select class="inp sm" data-chg="xfSt" aria-label="Статус"><option value="all">Все статусы</option>${sts.map(([k, t]) => `<option value="${k}"${f.st === k ? " selected" : ""}>${t}</option>`).join("")}</select>
+        ${r ? `<select class="inp sm" data-chg="xfRoute" aria-label="Маршрут"><option value="all">Все маршруты</option>${st.ROUTES.map((x) => `<option${f.route === x ? " selected" : ""}>${E(x)}</option>`).join("")}</select>` : ""}
+        <select class="inp sm" data-chg="xfTr" aria-label="Вид доставки"><option value="all">Все виды доставки</option>${Object.keys(st.TRANSPORT).map((k) => `<option value="${k}"${f.tr === k ? " selected" : ""}>${E(K.TR(k).t)}</option>`).join("")}</select>
+        ${dates("xfDate", f, "Отправлены")}${dirty ? clearBtn("xfClear") : ""}<span class="grow"></span><span class="muted s13">${list.length} ${u.plural(list.length, "груз", "груза", "грузов")}</span></div>
+      <div class="tbx"><table class="tbl" data-hl="all-t"><thead><tr><th>Наш трек-номер</th><th>Клиент</th><th>Статус</th><th>${r ? "Маршрут" : "Доставка"}</th><th>Груз</th><th>Отправлен</th>${m ? '<th class="r">Стоимость</th>' : ""}</tr></thead><tbody>${rows || `<tr><td colspan="${m ? 7 : 6}" class="muted">${dirty ? "По этим фильтрам ничего нет" : "Отправок пока нет"}</td></tr>`}</tbody></table></div>
+      <p class="muted s12 mt8">Все отправки в одном списке: в пути, на хранении, в выдаче и выданные. Нажмите на строку: откроется карточка груза.</p>`;
+  }
+
   function cons() {
-    const tab = curTab(), n = { way: wayAll().length, arr: arrAll().length, arch: archAll().length };
+    const tab = curTab(), n = { way: wayAll().length, arr: arrAll().length, arch: archAll().length, all: allAll().length };
     return `<div class="pane">
       <div class="ph"><h1>Отправки</h1><div class="seg light" data-hl="ctabs">${TABS.filter(([k]) => tabOk(k)).map(([k, t]) => `<button type="button" class="${tab === k ? "on" : ""}" data-act="ctab" data-k="${k}" data-ctab="${k}">${t}<b>${n[k]}</b></button>`).join("")}</div><span class="grow"></span>
         <button class="btn" type="button" data-act="exportCons" id="btnConsCsv" title="Выгрузить в Excel">${I("download")}<span class="hide-n">Excel</span></button></div>
-      ${tab === "way" ? consWay() : tab === "arr" ? consArr() : consArch()}
+      ${tab === "way" ? consWay() : tab === "arr" ? consArr() : tab === "all" ? consAll() : consArch()}
     </div>`;
   }
 
@@ -234,6 +267,8 @@
       .concat(wayList().map((s) => { const t = st.totals(s); return [s.id, s.clientId, cname(s.clientId), K.TR(s.transport).t].concat(r ? [s.route] : []).concat([s.dest, t.places, Math.round(t.weight), u.num(t.volume, 2), u.dFull(s.sentAt), u.dFull(s.eta)]).concat(m ? [s.cost, st.isPaid(s) ? "да" : "нет"] : []); })));
     if (tab === "arr") return K.csvDl("pribyvshie_" + day + ".csv", [["Трек-номер", "Код клиента", "Клиент", "Наименование", "Подстатус", "Заказ на выдачу", "Мест", "Вес, кг", "Объём, м³"].concat(r ? ["Маршрут"] : []).concat(["Прибыл", "Дней на хранении"])]
       .concat(arrAll().sort((a, b) => a.clientId.localeCompare(b.clientId) || b.arrivedAt - a.arrivedAt).map((s) => { const t = st.totals(s), o = st.issueOf(s); return [s.id, s.clientId, cname(s.clientId), cg(s).name || "", st.SUB[s.sub] || "", o ? o.id : "", t.places, Math.round(t.weight), u.num(t.volume, 2)].concat(r ? [s.route] : []).concat([u.dFull(s.arrivedAt), st.storeDays(s)]); })));
+    if (tab === "all") return K.csvDl("otpravki_vse_" + day + ".csv", [["Трек-номер", "Код клиента", "Клиент", "Статус", "Вид доставки"].concat(r ? ["Маршрут"] : []).concat(["Место назначения", "Мест", "Вес, кг", "Объём, м³", "Отправлен"]).concat(m ? ["Стоимость, $", "Оплачено"] : [])]
+      .concat(allList().map((s) => { const t = st.totals(s); return [s.id, s.clientId, cname(s.clientId), (ALL_ST.find((x) => x[0] === stKey(s)) || ["", ""])[1], K.TR(s.transport).t].concat(r ? [s.route] : []).concat([s.dest, t.places, Math.round(t.weight), u.num(t.volume, 2), u.dFull(s.sentAt)]).concat(m ? [s.cost, st.isPaid(s) ? "да" : "нет"] : []); })));
     return K.csvDl("arhiv_vydachi_" + day + ".csv", [["Трек-номер", "Код клиента", "Клиент", "Способ выдачи", "Накладная", "Дата выдачи", "Расходы, ₽", "Кто платит расходы", "Выдал"]]
       .concat(archList().map((s) => { const o = st.issueOf(s); return [s.id, s.clientId, cname(s.clientId), wayDone(s), s.issue && s.issue.type === "tk" ? s.issue.waybill : "", u.dFull(s.doneAt), st.repSum(s.rep), o && o.payer === "client" ? "клиент" : "компания", st.who(s.doneBy)]; })));
   };
@@ -248,6 +283,7 @@
     },
     cfClear: () => { App.tmp.cf = cfDef(); App.refresh(true); },
     afClear: () => { App.tmp.af = afDef(); App.refresh(true); },
+    xfClear: () => { App.tmp.xf = xfDef(); App.refresh(true); },
     exportCons,
     // окно «Выдать»
     issNew: () => { const sel = (App.tmp.asel || []).slice(); if (sel.length) issStart(sel, null); },
@@ -310,6 +346,8 @@
     cfDate: (v, el) => { cf()[el.dataset.k] = v; App.refresh(true); },
     afQ: (v) => { af().q = v; App.refresh(true); },
     afDate: (v, el) => { af()[el.dataset.k] = v; App.refresh(true); },
+    xfQ: (v) => { xf().q = v; App.refresh(true); },
+    xfDate: (v, el) => { xf()[el.dataset.k] = v; App.refresh(true); },
     issRecv: (v, el) => { const x = App.tmp.iss; if (!x) return; x.recv[el.dataset.k] = v; if (el.dataset.k !== "addr") return; const w = $("issCopy"), b = w && w.querySelector("[data-act=copy]"); if (w) w.hidden = !v.trim(); if (b) b.dataset.v = v.trim(); },
     issIn: (v, el) => { if (App.tmp.iss) App.tmp.iss[el.dataset.k] = v; },
     repIn: (v, el) => { if (App.tmp.rep) App.tmp.rep[el.dataset.k] = v; },
@@ -319,6 +357,9 @@
     cfRoute: (v) => { cf().route = v; App.refresh(true); },
     cfTr: (v) => { cf().tr = v; App.refresh(true); },
     afWay: (v) => { af().way = v; App.refresh(true); },
+    xfSt: (v) => { xf().st = v; App.refresh(true); },
+    xfRoute: (v) => { xf().route = v; App.refresh(true); },
+    xfTr: (v) => { xf().tr = v; App.refresh(true); },
   });
   Object.assign(App.D.screens, { cons });
   Object.assign(App.D.modals, { iss: () => issModal(), issc: () => ordModal(), rep: () => repModal() });

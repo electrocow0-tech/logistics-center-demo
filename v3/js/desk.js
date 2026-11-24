@@ -15,7 +15,8 @@
   const mine = (cid) => { const a = acc(); return !a || a.scope === "all" || (!!cid && (a.scope === "own" ? (st.client(cid) || {}).salesId === asId() : a.clients.includes(cid))); };
   // маршрут (3G, 88G, 89G, 81G) можно скрыть от сотрудника: тогда его нет ни в карточках, ни в списках, ни в фильтрах, ни в текстах истории
   const seeRoute = () => can("route");
-  const rt = (t) => (seeRoute() ? t : String(t).replace(/,?\s*маршрут (3G|88G|89G|81G)/g, ""));
+  // маршруты берутся из справочника агентов: новый агент тоже скрывается
+  const rt = (t) => (seeRoute() ? t : String(t).replace(new RegExp(",?\\s*маршрут (" + st.ROUTES.join("|") + ")(?![A-Za-z0-9])", "g"), ""));
   const vis = (o) => mine(o.clientId);
   const setName = (k) => { const a = st.S.access[k]; return a && a.preset && st.PRESETS[a.preset] ? "набор прав «" + st.PRESETS[a.preset][0].replace("как ", "") + "»" : st.STAFF[k].role.toLowerCase(); };
 
@@ -42,11 +43,14 @@
   const tsPill = (t) => `<span class="st" data-st="${t.status === "collect" ? "wait" : "pack"}">${t.status === "collect" ? "Сборка: склад ищет грузы" : "Упаковка: склад пакует"}</span>`;
 
   // ---------- меню ----------
-  const SCREEN_SEC = { board: "cargo", work: "cargo", clients: "clients", client: "clients", cons: "ships", money: "money", profit: "money", tariffs: "money", mskfin: "money", reports: "reports", staff: "staff", history: "history" };
-  const NAV = [["board", "board", "Грузы (информация)"], ["work", "layers", "Грузы"], ["clients", "users", "Клиенты"], ["cons", "truck", "Отправки"], ["money", "wallet", "Деньги"], ["reports", "chart", "Отчёты"], ["staff", "shield", "Сотрудники и доступы"], ["history", "history", "История действий"]];
+  // версия 3.2: вкладки «Денег» вынесены в левое меню отдельными пунктами группы «Деньги», «Сотрудники и доступы» стали вкладкой «Настроек»
+  const SCREEN_SEC = { board: "cargo", work: "cargo", clients: "clients", client: "clients", cons: "ships", money: "money", profit: "profit", agents: "agents", tariffs: "tariffs", mskfin: "mskfin", reports: "reports", staff: "staff", history: "history" };
+  const NAV = [["board", "board", "Грузы (информация)"], ["work", "layers", "Грузы"], ["clients", "users", "Клиенты"], ["cons", "truck", "Отправки"],
+    ["g:money", "", "Деньги"], ["money", "wallet", "Оплаты клиентов"], ["profit", "scale", "Расходы и прибыль"], ["agents", "route", "Агенты"], ["mskfin", "wh", "Склад в Москве"], ["tariffs", "dollar", "Тарифы клиентов"], ["g:end"],
+    ["reports", "chart", "Отчёты"], ["staff", "sliders", "Настройки"], ["history", "history", "История действий"]];
   const allowed = (s) => s === "none" || (!!SCREEN_SEC[s] && sec(SCREEN_SEC[s]));
   // если сотруднику не открыт ни один раздел, показывается спокойная заглушка
-  const home = () => { const n = NAV.find((x) => allowed(x[0])); return n ? n[0] : "none"; };
+  const home = () => { const n = NAV.find((x) => x[0].indexOf("g:") !== 0 && allowed(x[0])); return n ? n[0] : "none"; };
   function counts() {
     const S = st.S;
     return {
@@ -55,16 +59,30 @@
       cons: S.ships.filter((s) => (s.status === "arrived" || (s.status === "way" && can("way"))) && vis(s)).length,
     };
   }
+  // счётчики просрочки в меню: долг клиента дольше 14 дней, неоплаченные агентам треки старше 30 дней
+  function hot() {
+    const S = st.S, m = seeMoney();
+    return { money: m ? S.ships.filter((s) => vis(s) && st.overC(s)).length : 0, agents: m ? S.ships.filter(st.overA).length : 0 };
+  }
+  const HOT_T = { money: "треков с долгом дольше 14 дней", agents: "неоплаченных агентам треков старше 30 дней" };
   function side(cur) {
-    const c = counts(), curNav = cur === "client" ? "clients" : cur === "profit" || cur === "tariffs" || cur === "mskfin" ? "money" : cur, p = st.STAFF[actor()];
-    const items = NAV.filter((x) => allowed(x[0])).map((x) => `<a data-act="d" data-s="${x[0]}" class="${curNav === x[0] ? "on" : ""}" data-nav="${x[0]}">${I(x[1])}<span>${x[2]}</span>${c[x[0]] != null ? `<b>${c[x[0]]}</b>` : ""}</a>`).join("");
+    const c = counts(), h = hot(), curNav = cur === "client" ? "clients" : cur, p = st.STAFF[actor()];
+    let grp = false;
+    const items = NAV.map((x) => {
+      if (x[0] === "g:money") { grp = NAV.some((y) => st.MONEY_SECS.includes(y[0]) && allowed(y[0])); return grp ? `<div class="nav-g" data-navg="money"><span>${x[2]}</span></div>` : ""; }
+      if (x[0] === "g:end") return grp ? '<div class="sep"></div>' : "";
+      if (!allowed(x[0])) return "";
+      const n = h[x[0]] ? `<b class="hot" data-hot="${x[0]}" title="${h[x[0]]} ${HOT_T[x[0]]}">${h[x[0]]}</b>` : c[x[0]] != null ? `<b>${c[x[0]]}</b>` : "";
+      return `<a data-act="d" data-s="${x[0]}" class="${curNav === x[0] ? "on" : ""}" data-nav="${x[0]}">${I(x[1])}<span>${x[2]}</span>${n}</a>`;
+    }).join("");
     return `<div class="nav">${items}</div><div class="me"><span class="ava">${E(p.ava)}</span><span>${E(p.ru)}<small>${E(p.role)}</small></span></div>`;
   }
   function chromeBar() {
     const v = asId();
-    if (!v) return `<span class="cb-t">${I("monitor")}<span>Рабочее место администратора</span></span><span class="who">Рамиль · видит всё и может сделать любой шаг сам</span>`;
+    const qs = App.D && App.D.qsHtml ? App.D.qsHtml() : "";
+    if (!v) return `<span class="cb-t">${I("monitor")}<span>Рабочее место администратора</span></span>${qs}<span class="who">Рамиль · видит всё и может сделать любой шаг сам</span>`;
     const p = st.STAFF[v], a = acc();
-    return `<span class="cb-as">${I("eye")}<span class="ell1">Вы вошли как <b>${E(p.ru)}</b>, ${E(setName(v))}: ${a.scope === "sel" ? "только выбранные клиенты" : a.scope === "own" ? "только свои клиенты" : "все клиенты"}${a.fn.cost ? "" : ", без стоимости"}${a.fn.route ? "" : ", без маршрута"}</span></span><button class="btn sm dark" type="button" data-act="viewBack" id="btnViewBack">${I("back")}<span class="lg">Вернуться к администратору</span><span class="sm">Вернуться</span></button>`;
+    return `<span class="cb-as">${I("eye")}<span class="ell1">Вы вошли как <b>${E(p.ru)}</b>, ${E(setName(v))}: ${a.scope === "sel" ? "только выбранные клиенты" : a.scope === "own" ? "только свои клиенты" : "все клиенты"}${a.fn.cost ? "" : ", без стоимости"}${a.fn.route ? "" : ", без маршрута"}</span></span>${qs}<button class="btn sm dark" type="button" data-act="viewBack" id="btnViewBack">${I("back")}<span class="lg">Вернуться к администратору</span><span class="sm">Вернуться</span></button>`;
   }
 
   // ---------- подсказки при наборе: код или название клиента ----------
@@ -321,18 +339,18 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
         <div><h3 class="h3">Из чего собран груз</h3>${recs.map(recRow).join("")}</div>`;
     } else {
       const x = st.totals(o), has = (n) => o.docs.some((d) => d.name.indexOf(n) === 0), edit = can("dispatch"), ord = st.issueOf(o);
-      left = (o.rep && o.rep.photos.length ? photosHtml(o.rep.photos.map((p) => `<div class="ph-i">${u.photo(p, cg ? cg.packType : undefined)}<em>выдача</em></div>`)) : cg && o.status !== "way" && cg.photos.length ? photosHtml(cg.photos.map((p) => `<div class="ph-i">${u.photo(p, cg.packType)}<em>упаковка</em></div>`)) : "")
+      left = (o.rep && o.rep.photos.length ? photosHtml(o.rep.photos.map((p) => `<div class="ph-i">${u.photo(p, cg ? cg.packType : undefined)}<em>выдача</em></div>`)) : cg && cg.photos.length ? photosHtml(cg.photos.map((p) => `<div class="ph-i">${u.photo(p, cg.packType)}<em>упаковка</em></div>`)) : "")
         + `<dl class="kv">${ttRow(t, o)}<dt>Вид доставки</dt><dd>${E(TR(o.transport).label)}</dd>${seeRoute() ? `<dt>Маршрут</dt><dd><b>${E(o.route)}</b></dd>` : ""}<dt>Место назначения</dt><dd>${E(o.dest)}</dd><dt>Отправлен</dt><dd>${u.dLong(o.sentAt)}</dd><dt>${o.status === "way" ? "Прибытие" : "Прибыл в Москву"}</dt><dd>${o.status === "way" ? "около " + u.dLong(o.eta) : u.dLong(o.arrivedAt)}</dd>
           <dt>Мест</dt><dd>${u.places(x.places)}</dd><dt>Вес и объём</dt><dd>${u.kg(x.weight)} · ${u.vol(x.volume)}</dd>${o.status === "arrived" ? `<dt>Сейчас</dt><dd>${subPill(o)}</dd>` : ""}</dl>
         ${o.status !== "way" ? `<div data-hl="ship-story"><h3 class="h3">После прибытия</h3>${storyHtml(o)}${o.status === "done" ? repHtml(o) : ""}${ord && o.status !== "done" ? `<dl class="kv mt8"><dt>Получатель</dt><dd>${E(ord.recv.name) || '<span class="muted">не указан</span>'}${ord.recv.phone ? ", " + E(ord.recv.phone) : ""}</dd><dt>Адрес</dt><dd class="tt-dd">${E(ord.recv.addr) || '<span class="muted">не указан</span>'}${ord.recv.addr ? copyBtn(ord.recv.addr) : ""}</dd><dt>Способ выдачи</dt><dd>${E(wayText(ord))}</dd></dl>` : ""}</div>` : ""}
-        ${cg ? `<div><h3 class="h3">Груз</h3>${linkrow("cargo", cg.id, "layers", E(cg.name || cg.id), E(st.packsText(cg.packs)) + " · склад " + E(whn(cg.wh)))}</div>` : ""}
+        ${cg ? `<div data-hl="ship-pack"><h3 class="h3">Груз и упаковка</h3><dl class="kv"><dt>Наименование</dt><dd>${E(cg.name) || '<span class="muted">не указано</span>'}</dd><dt>Упаковка</dt><dd>${E(st.packsText(cg.packs))}</dd>
+          <dt>Размеры, см</dt><dd>${cg.dims.map((x) => `${x.l} × ${x.w} × ${x.h}, ${u.places(x.n)}`).join("<br>") || '<span class="muted">не указаны</span>'}</dd><dt>Плотность</dt><dd>${cg.volume ? Math.round(cg.weight / cg.volume) + " кг/м³" : '<span class="muted">нет объёма</span>'}</dd><dt>Склад</dt><dd>${E(whn(cg.wh))}, упаковал ${E(st.who(cg.by))} ${u.dShort(cg.at)}</dd></dl>
+          ${linkrow("cargo", cg.id, "layers", "Карточка упаковки " + E(cg.id), E(st.packsText(cg.packs)) + " · склад " + E(whn(cg.wh)))}</div>
+          <div data-hl="ship-recs"><h3 class="h3">Из чего собран груз: ${recsWord(cg.receiptIds.length)}</h3>${cg.receiptIds.map(st.rec).filter(Boolean).map(recRow).join("")}</div>` : ""}
         <div><h3 class="h3">Документы</h3>${o.docs.map((d) => `<div class="docrow">${I("file")}<span><b>${E(d.name)}</b><small>${u.dShort(d.at)} · ${E(st.who(d.by))}</small></span><button class="btn sm" type="button" data-act="toast" data-t="В рабочей версии файл скачается: ${E(d.name)}" data-i="download">Скачать</button></div>`).join("") || '<p class="muted small0">Документов пока нет.</p>'}
           ${edit ? `<div class="row wrap attach"><span class="muted">Прикрепить:</span>${DOCS.filter((n) => !has(n)).map((n) => `<button class="btn sm" type="button" data-act="addDoc" data-id="${E(o.id)}" data-n="${n}">${I("plus")}${n}</button>`).join("") || '<span class="muted">все документы на месте</span>'}</div>` : ""}</div>`;
     }
-    const moneyBox = t === "ship" && seeMoney() ? `<div class="box flat"><div class="row"><div class="grow"><small class="muted">Стоимость, $</small><div class="big">${u.usd(o.cost)}</div></div>${paidPill(o)}<button class="sw${st.isPaid(o) ? " on" : ""}" type="button" data-act="togglePaid" data-id="${E(o.id)}" aria-label="Оплачено" title="Отметка «Оплачено»"><i></i></button></div>
-        ${o.doorUsd ? `<div class="pline mini"><span>В том числе доставка до склада и доп. расходы в Китае</span><b>${u.cny(o.doorCny)} = ${u.usd(o.doorUsd)}</b></div>` : ""}
-        ${o.issueExpUsd ? `<div class="pline mini"><span>В том числе расходы при выдаче за счёт клиента</span><b>${st.rub(o.issueExpRub)} = ${u.usd(o.issueExpUsd)}</b></div>` : ""}
-        ${sec("money") ? `<div class="pline mini"><span>Расходы ${u.usd(st.expSum(o))}, прибыль <b class="${o.cost - st.expSum(o) >= 0 ? "ok" : "bad"}">${u.usd(o.cost - st.expSum(o))}</b></span><span class="lnk" data-act="d" data-s="profit">Подробнее</span></div>` : ""}</div>` : "";
+    const moneyBox = t === "ship" && seeMoney() ? (App.D.moneyBox ? App.D.moneyBox(o) : "") : "";
     return `<div class="cx" data-card="${t}:${E(id)}">
       <div class="cx-h"><div class="cx-t"><small>${KIND[t]}${wid ? " · склад " + E(whn(wid)) : ""}</small><h2>${E(o.id)}</h2></div>${pill(stage, true, t === "ship" && o.status === "done" ? issuedText(o) : null)}${t === "ship" ? subPill(o, true) : ""}
         ${c ? `<div class="cx-c"><span class="tag code${codeGo(c.id) ? " go" : ""}"${codeGo(c.id)}>${E(c.id)}</span>${allowed("clients") ? `<span class="lnk ell1" data-act="d" data-s="client" data-p="${E(c.id)}">${E(c.name)}</span>` : `<b class="ell1">${E(c.name)}</b>`}</div>` : '<div class="cx-c"><span class="tag">клиент не указан</span></div>'}
@@ -394,7 +412,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
   function orgOpen(ids, from) {
     const rs = ids.map(st.rec).filter((r) => r && r.clientId && !r.taskId && !r.cargoId); if (!rs.length) return;
     const f = rs[0], list = rs.filter((r) => r.clientId === f.clientId && r.wh === f.wh);
-    App.tmp.org = { clientId: f.clientId, wh: f.wh, tt: st.nextTT(f.clientId), ids: list.map((r) => r.id), name: [...new Set(list.map((r) => r.what).filter(Boolean))].join(", ").slice(0, 60), packPlan: [], transport: "", note: "", date: dISO(Date.now()), from: from || null };
+    App.tmp.org = { clientId: f.clientId, wh: f.wh, tt: st.nextTT(f.clientId), ids: list.map((r) => r.id), name: [...new Set(list.map((r) => r.what).filter(Boolean))].join(", ").slice(0, 60), packPlan: [], transport: "", note: "", value: "", date: dISO(Date.now()), from: from || null };
     orgModal();
   }
   function orgModal() {
@@ -407,6 +425,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
       <div class="fld mt"><span>Вид упаковки</span><div class="choice cols4" data-hl="org-pack">${st.PACK.map((k) => `<button type="button" class="${d.packPlan.includes(k) ? "on" : ""}" data-act="orgPack" data-k="${k}">${L.t("pk_" + k)}</button>`).join("")}</div></div>
       <div class="fld mt"><span>Вид доставки, если уже понятно</span><div class="choice cols4">${Object.keys(st.TRANSPORT).map((k) => `<button type="button" class="${k === d.transport ? "on" : ""}" data-act="orgTr" data-k="${k}">${I(TR(k).ic)}${TR(k).t}</button>`).join("")}<button type="button" class="${d.transport ? "" : "on"}" data-act="orgTr" data-k="">Пока не ясно</button></div></div>
       <div class="row2 mt"><label class="fld"><span>Примечание</span><input class="inp" data-in="orgIn" data-k="note" value="${E(d.note)}" placeholder="Например: хрупкое, проложить пенопластом" autocomplete="off"></label><label class="fld"><span>Дата</span><input class="inp" type="date" data-in="orgIn" data-k="date" value="${E(d.date)}"></label></div>
+      ${seeMoney() ? `<label class="fld mt" data-hl="org-value"><span>Стоимость груза, $: для страховки ${E(u.num(st.S.dir.insPct, st.S.dir.insPct % 1 ? 1 : 0))}%</span><input class="inp" data-in="orgIn" data-k="value" inputmode="numeric" value="${E(d.value)}" placeholder="Можно указать позже, при отправке или в карточке груза" autocomplete="off"></label>` : ""}
       <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="orgGo" id="btnOrgGo" ${st.ttCheck(d.tt) ? "disabled" : ""}>${I("check")}Готово</button></div>`, "wide");
   }
   // ---------- окно «Исправить трек-номер»: заказ на упаковку и упакованный груз (у отправки поле в окне исправления данных) ----------
@@ -421,7 +440,8 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
   function sendOpen(ids) {
     const cs = ids.map(st.cargo).filter((c) => c && st.left(c) > 0); if (!cs.length) return;
     const tr = cs.map((c) => c.transport).find((x) => st.TRANSPORT[x]) || "auto", cl = st.client(cs[0].clientId);
-    App.tmp.snd = { ids: cs.map((c) => c.id), transport: tr, route: st.ROUTES[0], dest: cs.every((c) => c.clientId === cs[0].clientId) && st.DEST.includes(cl.city) ? cl.city : st.DEST[0], date: dISO(Date.now()), picked: false };
+    const vals = {}; cs.forEach((c) => { vals[c.id] = c.value ? String(c.value) : ""; });
+    App.tmp.snd = { ids: cs.map((c) => c.id), transport: tr, route: st.ROUTES[0], dest: cs.every((c) => c.clientId === cs[0].clientId) && st.DEST.includes(cl.city) ? cl.city : st.DEST[0], date: dISO(Date.now()), picked: false, values: vals };
     sendModal();
   }
   const shipFields = (d, p) => `<div class="fld"><span>Вид доставки</span><div class="choice cols3">${Object.keys(st.TRANSPORT).map((k) => `<button type="button" class="${k === d.transport ? "on" : ""}" data-act="${p}Tr" data-k="${k}">${I(TR(k).ic)}<span>${TR(k).t}<small>${TR(k).label.split(", ")[1]}</small></span></button>`).join("")}</div></div>
@@ -433,9 +453,12 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
     show("send", `<div class="mh"><div class="mi">${I("send")}</div><div><h2>Отправить</h2><div class="muted s13">${recsWord(cs.length)}, ${u.places(cs.reduce((a, c) => a + c.places, 0))}, ${u.kg(cs.reduce((a, c) => a + c.weight, 0))}</div></div>${xBtn}</div>
       <div class="fld"><span>Наши трек-номера</span><div class="chips">${cs.map((c) => `<span class="chipx"><b class="mono">${E(c.id)}</b><small>${E(c.clientId)} · ${u.places(c.places)}</small><button type="button" data-act="sndDrop" data-id="${E(c.id)}" aria-label="Убрать из отправки" ${cs.length > 1 ? "" : "disabled"}>${I("x")}</button></span>`).join("")}</div></div>
       <div class="mt">${shipFields(d, "snd")}</div>
-      <div class="found mt">${I("bell")}<span>Склад увидит маршрут и место назначения у этих грузов<small>клиент получит уведомление: трек-номер, дата прибытия и стоимость</small></span></div>
+      ${seeMoney() && App.D.sendCalc ? App.D.sendCalc(d, cs) : ""}
+      <div class="found mt" id="sndEta">${sendEta(d)}</div>
       <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="sndGo" id="btnSendGo">${I("send")}Отправить</button></div>`, "wide");
   }
+  // ожидаемая дата прибытия: срок в пути у агента маршрута (авиа быстрее)
+  function sendEta(d) { const days = st.etaDays(d.route, d.transport), a = st.agentOf(d.route); return `${I("bell")}<span>Прибытие около ${u.dLong(Date.now() + days * u.DAY)}: ${days} ${u.plural(days, "день", "дня", "дней")} в пути${a && d.transport !== "air" && seeRoute() ? ", срок агента " + E(a.route) : ""}<small>склад увидит маршрут и место назначения, клиент получит уведомление: трек-номер, дата прибытия и стоимость</small></span>`; }
   function shipEditModal() {
     const d = App.tmp.sed, s = d && st.ship(d.id); if (!s) return;
     show("sed", `<div class="mh"><div class="mi">${I("edit")}</div><div><h2>Исправить данные отправки</h2><div class="muted s13"><span class="mono">${E(s.id)}</span> · ${E(s.clientId)} ${E(cname(s.clientId))}. Изменение попадёт в историю действий.</div></div>${xBtn}</div>
@@ -511,7 +534,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
           <div class="box" data-hl="cl-recv"><h3>${I("pin")}Получатель</h3><dl class="kv"><dt>ФИО получателя</dt><dd>${nv(r.name)}</dd><dt>Телефон</dt><dd>${nv(r.phone)}</dd><dt>Адрес</dt><dd class="tt-dd">${nv(r.addr)}${r.addr ? copyBtn(r.addr) : ""}</dd><dt>Способ выдачи</dt><dd>${st.WAY[r.way] ? E(wayText(r)) : '<span class="muted">не указан</span>'}</dd></dl><p class="muted s12 mt8 p0">Эти данные подставляются в окно «Выдать», их можно исправить для отдельной выдачи.</p></div>
           ${sec("money") ? `<div class="box"><h3>${I("dollar")}Тариф</h3><div class="pline mini"><span>${E(st.tariffLabel(c))}</span><span class="lnk" data-act="d" data-s="tariffs">Тарифы</span></div></div>` : ""}
           <div class="box"><h3>${I("pin")}Адреса складов для поставщиков</h3><p class="s13 p0 mb8">Клиент отправляет адрес поставщику, тот пишет код на каждой коробке.</p>
-            ${st.WH.map((w) => `<div class="addr"><b>${E(w.ru)}</b><span>${E(w.addr)} · 唛头 ${E(c.id)}</span></div>`).join("")}</div>
+            ${st.S.dir.whs.map((w) => `<div class="addr"><b>${E(w.ru)}</b><span>${E(w.addr)} · 唛头 ${E(c.id)}${w.addrRu ? `<small class="muted blk">${E(w.addrRu)}</small>` : ""}</span></div>`).join("")}</div>
         </div>
       </div>
     </div>`;
@@ -588,18 +611,19 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
             ${a.scope !== "all" ? `<p class="muted s12 mt8 p0">${a.scope === "own" ? "Свои клиенты: те, где сотрудник указан менеджером. Отметьте клиента, и он закрепится за ним." : "Сотрудник видит только отмеченных клиентов."}</p><label class="search mt8">${I("search")}<input data-in="accQ" value="${E(App.tmp.accq || "")}" placeholder="Код или название, Enter отмечает" autocomplete="off" data-hl="acc-q"></label><div class="acc-cl" id="accCl">${accClients(sel, a)}</div>` : '<p class="muted s13 mt8 p0">Сотрудник видит грузы всех клиентов. Чтобы ограничить, выберите «Свои» или «Выбранные».</p>'}</div></div>`;
     }
     return `<div class="pane">
-      <div class="ph"><div><h1>Сотрудники и доступы</h1></div><span class="grow"></span><button class="btn pri" type="button" data-act="nstOpen" id="btnNewStaff">${I("plus")}Новый сотрудник</button></div>
+      <div class="ph"><div><h1>Настройки</h1></div><span class="grow"></span><button class="btn pri" type="button" data-act="nstOpen" id="btnNewStaff">${I("plus")}Новый сотрудник</button></div>
+      ${App.D.setTabs ? App.D.setTabs("staff") : ""}
       <div class="note acc-note">${I("info")}Вы сами создаёте сотрудника и задаёте, что он видит. Он входит по своему логину и паролю на этот же адрес.</div>
       <div class="acc"><div class="stf-l">${list}</div><div class="box acc-p" data-hl="acc-p">${panel}</div></div>
     </div>`;
   }
   // заглушка для сотрудника, которому пока ничего не открыли
   function none() {
-    return `<div class="pane"><div class="empty-s"><span class="mi">${I("lock")}</span><h2>Вам пока не открыт ни один раздел</h2><p>Администратор откроет нужные разделы в «Сотрудники и доступы», и они сразу появятся в меню слева.</p></div></div>`;
+    return `<div class="pane"><div class="empty-s"><span class="mi">${I("lock")}</span><h2>Вам пока не открыт ни один раздел</h2><p>Администратор откроет нужные разделы в «Настройках», и они сразу появятся в меню слева.</p></div></div>`;
   }
 
   // ---------- история действий ----------
-  const LK = { accept: ["Приёмка", "in"], unknown: ["Приёмка", "unk"], bind: ["Привязка клиента", "in"], packcmd: ["Организация упаковки", "pack"], tt: ["Трек-номер", "pack"], collected: ["Сборка", "pack"], lost: ["Не найден", "unk"], packed: ["Упаковка", "pack"], packdiff: ["Упаковано иначе", "unk"], dispatch: ["Отправка", "way"], edit: ["Изменение", "arrived"], delete: ["Удаление", "unk"], arrive: ["Прибытие", "arrived"], issuecmd: ["Команда на выдачу", "arrived"], issueacc: ["Принят складом", "arrived"], issue: ["Выдача", "done"], pay: ["Оплата", "in"], wop: ["Взаиморасчёты", "way"], client: ["Клиент", "wait"], access: ["Доступ", "wait"], doc: ["Документ", "wait"], expected: ["Трек клиента", "wait"] };
+  const LK = { accept: ["Приёмка", "in"], unknown: ["Приёмка", "unk"], bind: ["Привязка клиента", "in"], packcmd: ["Организация упаковки", "pack"], tt: ["Трек-номер", "pack"], collected: ["Сборка", "pack"], lost: ["Не найден", "unk"], packed: ["Упаковка", "pack"], packdiff: ["Упаковано иначе", "unk"], dispatch: ["Отправка", "way"], edit: ["Изменение", "arrived"], delete: ["Удаление", "unk"], arrive: ["Прибытие", "arrived"], issuecmd: ["Команда на выдачу", "arrived"], issueacc: ["Принят складом", "arrived"], issue: ["Выдача", "done"], pay: ["Оплата", "in"], money: ["Деньги", "pack"], apay: ["Оплата агенту", "way"], dir: ["Настройки", "wait"], wop: ["Взаиморасчёты", "way"], client: ["Клиент", "wait"], access: ["Доступ", "wait"], doc: ["Документ", "wait"], expected: ["Трек клиента", "wait"] };
   // к какому грузу относится запись: наш трек-номер, если он есть в цепочке, иначе номер прихода
   const logRef = (e) => e.ids.find((x) => !/^П-0\d+$/.test(x)) || e.ids[0];
   function histList() {
@@ -613,7 +637,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
     const h = App.tmp.hist, list = histList(), shown = list.slice(0, h.all ? 400 : 30), S = st.S;
     const rows = shown.map((e) => { const k = LK[e.k] || ["Действие", "wait"], p = S.staff[e.by], ref = logRef(e); return `<tr${ref ? ` class="click" data-act="histOpen" data-id="${E(ref)}"` : ""} data-log="${E(e.id)}"><td class="nw">${u.dShort(e.at)} <span class="muted">${u.hm(e.at)}</span></td><td><span class="row"><span class="ava sm${p ? "" : " cl"}">${p ? E(p.ava) : I("user")}</span><span class="ct"><b>${E(st.who(e.by))}</b><small>${p ? E(p.role) : "кабинет клиента"}</small></span></span></td><td>${pill(k[1], false, k[0])}</td><td>${E(cap(rt(e.t).replace(/^[^:]{3,34}: /, "")))}</td><td class="r muted">${ref ? `<span class="hid mono">${E(ref)}</span>` : ""}</td></tr>`; }).join("");
     return `<div class="pane">
-      <div class="ph"><div><h1>История действий</h1><div class="sub">Кто, когда и что добавил, изменил или удалил: приёмка, упаковка, отправки, прибытие, выдача, оплаты, взаиморасчёты, клиенты, доступы. Записи нельзя изменить.</div></div><span class="grow"></span><button class="btn" type="button" data-act="exportHist">${I("download")}Выгрузить в Excel</button></div>
+      <div class="ph"><div><h1>История действий</h1><div class="sub">Кто, когда и что добавил, изменил или удалил: приёмка, упаковка, отправки, прибытие, выдача, оплаты, деньги по трекам, оплаты агентам, взаиморасчёты, клиенты, доступы, настройки. Записи нельзя изменить.</div></div><span class="grow"></span><button class="btn" type="button" data-act="exportHist">${I("download")}Выгрузить в Excel</button></div>
       <div class="fbar hist-f"><select class="inp sm" data-chg="histWho" aria-label="Сотрудник" data-hl="hist-who"><option value="all">Все сотрудники</option>${Object.keys(S.staff).map((k) => `<option value="${k}"${h.who === k ? " selected" : ""}>${E(S.staff[k].ru)} · ${E(S.staff[k].role)}</option>`).join("")}<option value="clients"${h.who === "clients" ? " selected" : ""}>Клиенты</option></select>
         <label class="search" data-hl="hist-q">${I("search")}<input data-in="histQ" value="${E(h.q)}" placeholder="Трек-номер груза или код клиента"></label>${h.q || h.who !== "all" ? `<button class="btn sm ghost" type="button" data-act="histClear">${I("x")}Сбросить</button>` : ""}<span class="grow"></span><span class="muted s13">${list.length} ${u.plural(list.length, "запись", "записи", "записей")}</span></div>
       <table class="tbl hist" data-hl="hist-t"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Что сделано</th><th class="r">Груз</th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">По этому фильтру записей нет</td></tr>'}</tbody></table>
@@ -649,7 +673,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
     orgFill: () => { const o = App.tmp.org; if (!o) return; o.name = o.name || "Светильники и посуда"; if (!o.packPlan.length) o.packPlan = ["crate"]; o.transport = o.transport || "auto"; o.note = o.note || "Хрупкое, проложить пенопластом"; o.picked = true; orgModal(); },
     orgGo: () => {
       const o = App.tmp.org; if (!o || !o.ids.length || st.ttCheck(o.tt)) return;
-      const t = st.organize(o.ids.slice(), { tt: o.tt, name: o.name, packPlan: o.packPlan, transport: o.transport, note: o.note, date: fromISO(o.date), by: actor() });
+      const t = st.organize(o.ids.slice(), { tt: o.tt, name: o.name, packPlan: o.packPlan, transport: o.transport, note: o.note, value: u.parse(o.value), date: fromISO(o.date), by: actor() });
       App.tmp.org = null; App.tmp.csel = [];
       if (!t) { App.closeDesk(); return; }
       if (o.from === "card") openItem("task", t.id); else App.closeDesk();
@@ -666,7 +690,8 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
     sndFill: () => { const o = App.tmp.snd; if (!o) return; o.route = "88G"; o.picked = true; sendModal(); },
     sndGo: () => {
       const o = App.tmp.snd; if (!o || !can("dispatch")) return;
-      const list = st.send(o.ids.slice(), { transport: o.transport, route: o.route, dest: o.dest, date: o.date === dISO(Date.now()) ? null : fromISO(o.date), by: actor() });
+      const vals = {}; Object.keys(o.values || {}).forEach((k) => { if (String(o.values[k]).trim() !== "") vals[k] = u.parse(o.values[k]); });
+      const list = st.send(o.ids.slice(), { transport: o.transport, route: o.route, dest: o.dest, date: o.date === dISO(Date.now()) ? null : fromISO(o.date), values: vals, by: actor() });
       App.tmp.snd = null; App.tmp.psel = []; App.closeDesk();
       if (list.length) { App.toast(rt(list.length > 1 ? `Отправлено грузов: ${list.length}, маршрут ${list[0].route}. Клиенты получили уведомления` : `Груз ${list[0].id} отправлен, маршрут ${list[0].route}, ${list[0].dest}`), "send"); if (App.scenario) list.forEach((s) => App.scenario.check("dispatched", s)); }
     },
@@ -815,7 +840,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
   // Enter в поиске по клиентам в доступах отмечает первого найденного
   document.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target && e.target.dataset && e.target.dataset.in === "accQ") { const b = document.querySelector("#accCl .prow"); if (b) { e.preventDefault(); b.click(); } } });
 
-  App.DK = { asId, acc, actor, can, sec, seeMoney, seeRoute, rt, mine, vis, pill, subPill, wayText, issuedText, copyBtn, cname, whn, xBtn, today, csvDl, show, setModal, recsWord, TR, dISO, fromISO, cap, ta, linkrow, photosHtml, confirmBox, storyHtml, repHtml, allowed };
+  App.DK = { asId, acc, actor, can, sec, seeMoney, seeRoute, rt, mine, vis, pill, subPill, wayText, issuedText, copyBtn, cname, whn, xBtn, today, csvDl, show, setModal, recsWord, TR, dISO, fromISO, cap, ta, linkrow, photosHtml, confirmBox, storyHtml, repHtml, allowed, paidPill, recRow, hot, sendEta, getItem };
   App.D = {
     side, chromeBar, allowed, home, screens: { board, work, clients, client, staff, history, none }, modals: MODALS,
     after() {},

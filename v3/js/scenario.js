@@ -32,6 +32,8 @@
   const closeTip = () => ({ sel: "#modal .x", tip: "Закройте это окно." });
   const cardOf = (id) => App.modalOpen() && App.tmp.mk === "card" && App.tmp.card && App.tmp.card.id === id;
   const other = () => st.waiting("yiwu").find((x) => x.clientId === st.ME && x.id !== sc().recId);
+  // две самые старые неоплаченные партии агента 89G: их администратор оплачивает одним платежом
+  const agPair = () => st.S.ships.filter((s) => s.route === "89G" && st.agentDebt(s) >= 0.5).sort((a, b) => a.sentAt - b.sentAt).slice(0, 2).map((s) => s.id);
 
   // Каждый шаг: что показать (go) и подсказка для текущего состояния (hint → {sel, tip, act, actLabel, slot, data})
   const STEPS = [
@@ -211,12 +213,35 @@
         const n = needPhone("msk", ["mfin"], "mfin", "Финансы"); if (n) return n;
         return { sel: ps("msk", '[data-mbal="RUB"]'), tip: "Два баланса: в рублях и в долларах, каждый может быть в плюсе или в минусе. Ниже фильтр по периоду и все операции, сверху оплата клиента при выдаче.", act: "scnNext", actLabel: "Дальше", pri: true };
       } },
+    { k: "agent", who: ["route", "Администратор"], t: "Оплата агенту за две партии",
+      p: "Агент: перевозчик по маршруту. Сверху карточки по агентам: начислено, оплачено, долг. Администратор отмечает треки агента и оплачивает их одним платежом, карточки пересчитываются сами.",
+      go: () => { App.tmp.agf = { route: "all", st: "all", over: false, q: "" }; App.tmp.asel2 = []; sc().agIds = agPair(); App.saveUI(); goDesk("agents"); },
+      hint: () => {
+        const n = needDesk("agents", "Агенты"); if (n) return n;
+        if (App.modalOpen()) {
+          if (App.tmp.mk !== "agp") return closeTip();
+          return { sel: "#btnAgPayGo", tip: "Сумма посчиталась по отмеченным трекам, её можно исправить. Дата, способ оплаты и примечание попадут в историю оплат агенту. Нажмите «Оплатить».", act: "agpFill", actLabel: "Заполнить за меня" };
+        }
+        if ((App.tmp.agf || {}).route !== "89G") return { sel: '[data-agc="89G"]', tip: "Карточки по агентам, как балансы склада в Москве: начислено, оплачено, долг. Нажмите на 89G: в списке останутся только его треки." };
+        const sel = App.tmp.asel2 || [], miss = (sc().agIds || []).find((id) => !sel.includes(id));
+        if (miss) return { sel: `[data-at="${miss}"] .cbb`, tip: sel.length ? "И вторую партию этого агента: оплатим обе одним платежом." : "Список по трекам: вес, объём, плотность, сумма агенту и статус. Отметьте неоплаченную партию." };
+        return { sel: "#btnAgPay", tip: "Внизу сумма по отмеченным трекам. Нажмите «Оплатить»." };
+      } },
+    { k: "dir", who: ["sliders", "Администратор"], t: "Настройки: агенты, упаковка, страховка", manual: true,
+      p: "В «Настройках» справочники: агенты со ставкой и сроком в пути, цены упаковки, процент страховки, склады в Китае, транспортные компании и курсы валют. Изменения сразу идут в расчёты новых отправок.",
+      go: () => { App.tmp.stab = "agents"; goDesk("staff"); },
+      hint: () => {
+        const n = needDesk("staff", "Настройки"); if (n) return n;
+        if (App.modalOpen()) return closeTip();
+        if (App.tmp.stab !== "agents") return { sel: '[data-stab="agents"]', tip: "Откройте вкладку «Агенты»." };
+        return { sel: '[data-hl="dir-agents"]', tip: "Агенты по маршрутам: ставка за кг или за м³, растаможка, срок в пути. Новый агент сразу появится в окне «Отправить». Рядом вкладки упаковки, страховки, складов, транспортных компаний и курсов валют.", act: "scnNext", actLabel: "Дальше", pri: true };
+      } },
     { k: "staff", who: ["shield", "Администратор"], t: "Менеджер по продажам и его доступ",
       p: "Администратор сам создаёт сотрудника и выбирает набор прав. Менеджер по продажам видит только своих клиентов, может организовать упаковку их грузов, маршрут ему не показывается.",
-      go: () => goDesk("staff"),
+      go: () => { App.tmp.stab = "staff"; goDesk("staff"); },
       hint: () => {
         if (App.ui.mode === "admin" && App.ui.viewAs) return { sel: "#btnViewBack", tip: "Так систему видит менеджер по продажам: только свои клиенты, без маршрута и без «Отправок». Полоса сверху напоминает, под кем вы вошли. Нажмите «Вернуться к администратору».", side: "b" };
-        const n = needDesk("staff", "Сотрудники и доступы"); if (n) return n;
+        const n = needDesk("staff", "Настройки"); if (n) return n;
         if (App.modalOpen()) {
           if (App.tmp.mk !== "staff") return closeTip();
           const d = App.tmp.nst || {};
@@ -224,6 +249,7 @@
           if (d.preset !== "sales") return { sel: '#modal [data-hl="nst-preset"]', tip: "Выберите набор «как менеджер по продажам». Разделы ниже можно поправить вручную." };
           return { sel: "#btnNstGo", tip: "Нажмите «Создать»." };
         }
+        if ((App.tmp.stab || "staff") !== "staff") return { sel: '[data-stab="staff"]', tip: "Откройте вкладку «Сотрудники и доступы»." };
         if (!sc().staffId) return { sel: "#btnNewStaff", tip: "Вы сами создаёте сотрудника и задаёте, что он видит. Нажмите «Новый сотрудник»." };
         if (App.tmp.staffSel !== sc().staffId) return { sel: `[data-stf="${sc().staffId}"]`, tip: "Выберите нового сотрудника в списке." };
         return { sel: "#btnViewAs", tip: "Ниже простым текстом написано, что он видит. Нажмите «Войти под этим сотрудником»." };
@@ -407,6 +433,7 @@
     if (k === "issue" && ev === "issuecmd" && data.shipIds.includes(s.ttId)) { s.issId = data.id; App.saveUI(); next(1900); return; }
     if (k === "maccept" && ev === "issueacc" && data.id === s.issId) { next(1700); return; }
     if (k === "mrep" && ev === "issued" && data.id === s.ttId) { next(2000); return; }
+    if (k === "agent" && ev === "agentpaid" && data.route === "89G") { next(1900); return; }
     if (k === "staff" && ev === "staffNew") { s.staffId = data; App.saveUI(); }
     if (k === "staff" && ev === "viewAs") { s.seen = true; App.saveUI(); }
     if (k === "staff" && ev === "viewBack" && s.seen) { next(900); return; }

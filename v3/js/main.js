@@ -172,7 +172,7 @@
     pushOpen: () => { const i = App.cur, go = pushGo[i]; hidePush(i); if (go) App.go.phone(i, go[0], go[1]); },
     menu: () => App.overlay(`<h2 style="margin-top:0">Меню прототипа</h2>
       <div class="menu-list">
-        <button type="button" data-act="scnStart">${I("play")}<span><b>Пройти сценарий</b><small>путь груза от трек-номера до выдачи в Москве, 6 минут</small></span></button>
+        <button type="button" data-act="scnStart">${I("play")}<span><b>Пройти сценарий</b><small>путь груза от трек-номера до выдачи в Москве и деньги, 7 минут</small></span></button>
         <button type="button" data-act="reset">${I("refresh")}<span><b>Сбросить демо</b><small>вернуть исходные данные</small></span></button>
       </div><div class="of"><button class="btn lg block" type="button" data-act="closeAny">Закрыть</button></div>`),
     reset: () => App.overlay(`<span class="opt">${I("refresh")}<span class="ol">Сброс</span></span><h2>Начать демо заново?</h2><p>Все изменения, которые вы сделали в прототипе, пропадут, данные вернутся к исходным.</p><div class="of"><button class="btn pri lg" type="button" data-act="resetYes">Сбросить</button><button class="btn lg" type="button" data-act="closeAny">Отмена</button></div>`),
@@ -212,7 +212,7 @@
     ui.deskP = fix(ui.deskP);
     if (ui.scn.ttId === from) ui.scn.ttId = to;
     ["card", "tp", "sed", "tte", "rep"].forEach((k) => { if (t[k] && t[k].id === from) t[k].id = to; });
-    t.psel = (t.psel || []).map(fix); t.asel = (t.asel || []).map(fix); if (t.snd) t.snd.ids = t.snd.ids.map(fix); if (t.iss) t.iss.ids = t.iss.ids.map(fix);
+    t.psel = (t.psel || []).map(fix); t.asel = (t.asel || []).map(fix); t.psel2 = (t.psel2 || []).map(fix); t.asel2 = (t.asel2 || []).map(fix); if (t.agp) t.agp.ids = t.agp.ids.map(fix); if (t.mon && t.mon.id === from) t.mon.id = to; if (t.snd) t.snd.ids = t.snd.ids.map(fix); if (t.iss) t.iss.ids = t.iss.ids.map(fix);
     [t.pack, t.col, t.mrep].forEach((m) => { if (m && m[from]) { m[to] = m[from]; delete m[from]; } });
     if (t.hist.q.trim().toUpperCase() === from) t.hist.q = to;
     App.saveUI();
@@ -254,9 +254,9 @@
     setTimeout(() => App.overlay(`<span class="opt">${I("spark")}<span class="ol">Прототип</span></span>
       <h2>Центр логистики: прототип системы</h2>
       <p>Вверху четыре вкладки: «Администратор» (рабочее окно), «Склад в Китае», «Склад в Москве» и «Клиент» (их телефоны). Всё, что делает один, сразу видно у остальных.</p>
-      <ul><li>Грузы на складе по кодам клиентов: отметили несколько и организовали упаковку</li><li>Наш трек-номер вида TT-D0512727 присваивается сам или вписывается вручную, клиент следит за грузом по нему</li><li>Склад в Китае: приёмка со сканированием, сборка, упаковка с размерами, список и отчёт</li><li>Отправка с маршрутом, прибытие в Москву, команда «Выдать» сразу на несколько грузов</li><li>Склад в Москве: хранение, выдача с фотоотчётом, архив и взаиморасчёты в рублях и долларах</li><li>Клиенты, оплаты за несколько грузов, сотрудники и доступы, история действий</li></ul>
+      <ul><li>Грузы на складе по кодам клиентов: отметили несколько и организовали упаковку</li><li>Наш трек-номер вида TT-D0512727 присваивается сам или вписывается вручную, клиент следит за грузом по нему</li><li>Склад в Китае: приёмка со сканированием, сборка, упаковка с размерами, список и отчёт</li><li>Отправка с маршрутом, прибытие в Москву, команда «Выдать» сразу на несколько грузов</li><li>Склад в Москве: хранение, выдача с фотоотчётом, архив и взаиморасчёты в рублях и долларах</li><li>Оплаты клиентов по трекам, оплаты агентам по маршрутам, расходы и прибыль</li><li>Клиенты, сотрудники и доступы, справочники в настройках, история действий</li></ul>
       <p class="muted">Данные вымышленные. Можно смело нажимать всё подряд: «Сбросить демо» вернёт всё как было.</p>
-      <div class="of"><button class="btn pri lg" type="button" data-act="scnStart">${I("play")}Пройти сценарий, 6 минут</button><button class="btn lg" type="button" data-act="introClose">Осмотреться самостоятельно</button></div>`), 350);
+      <div class="of"><button class="btn pri lg" type="button" data-act="scnStart">${I("play")}Пройти сценарий, 7 минут</button><button class="btn lg" type="button" data-act="introClose">Осмотреться самостоятельно</button></div>`), 350);
   }
   // показываем страницу, когда готовы и шрифт, и интерфейс: без пустых кнопок и сдвигов
   window.__ar = 1; if (window.__fr) document.documentElement.classList.remove("fl");

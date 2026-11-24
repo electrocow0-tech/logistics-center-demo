@@ -377,7 +377,7 @@
     const c = st.client(ME);
     return `<div class="pp">${clientHead("Профиль")}
       <div class="pcard codec"><span class="muted s12">Ваш код клиента</span><b>${E(c.id)}</b><span class="sub">Поставщик пишет его на каждой коробке</span></div>
-      <div class="pcard"><div class="plabel">Адреса складов для ваших поставщиков</div>${st.WH.map((w) => `<div class="addr"><b>${E(w.ru)}</b><span>${E(w.addr)}<br>收货人: 中心物流 · 唛头: ${E(c.id)}</span><button class="btn sm" type="button" data-act="toast" data-t="Адрес склада (${E(w.ru)}) скопирован, отправьте его поставщику" data-i="copy" aria-label="Скопировать адрес">${I("copy")}</button></div>`).join("")}</div>
+      <div class="pcard"><div class="plabel">Адреса складов для ваших поставщиков</div>${st.S.dir.whs.map((w) => `<div class="addr"><b>${E(w.ru)}</b><span>${E(w.addr)}<br>收货人: 中心物流 · 唛头: ${E(c.id)}</span><button class="btn sm" type="button" data-act="toast" data-t="Адрес склада (${E(w.ru)}) скопирован, отправьте его поставщику" data-i="copy" aria-label="Скопировать адрес">${I("copy")}</button></div>`).join("")}</div>
       <div class="pcard"><div class="plabel">Уведомления</div>
         <div class="pline"><span>В приложении<small>каждый этап: принят, упакован, отправлен, прибыл в Москву, готов к выдаче, выдан</small></span><span class="st" data-st="in">включено</span></div>
         <div class="pline"><span>Telegram<small>${st.S.tg ? "подключён" : "дублировать уведомления в Telegram"}</small></span>${st.S.tg ? '<span class="st" data-st="in">включено</span>' : '<button class="btn sm" type="button" data-act="tgOn">Подключить</button>'}</div></div>

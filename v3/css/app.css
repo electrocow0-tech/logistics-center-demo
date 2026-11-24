@@ -1342,3 +1342,115 @@ button.mtr:hover{background:var(--accent-soft)}
   .modal .mh>div:nth-child(2){flex:1 1 calc(100% - 120px)}
   .modal .mh>.st{order:5;margin:-6px 0 0 56px}
 }
+
+/* ===================== версия 3.2: деньги по трекам, агенты, настройки, быстрый поиск ===================== */
+/* широкие таблицы прокручиваются внутри своего блока, страница не уезжает вбок */
+.tbx{overflow-x:auto;border-radius:var(--r);box-shadow:var(--sh-1),0 0 0 1px var(--line-2);background:var(--white);scrollbar-width:thin}
+.tbx>.tbl{display:table;width:100%;box-shadow:none;border-radius:0;overflow:visible}
+.tbx>.pay-t{min-width:1080px}
+.tbx>.ag-t{min-width:860px}
+.tbx>[data-hl="profit-t"]{min-width:960px}
+.tbx>[data-hl="all-t"]{min-width:900px}
+.tbx>[data-hl="pay-hist"],.tbx>[data-hl="ag-hist"]{min-width:780px}
+.tbx>[data-hl="pay-clients"]{min-width:760px}
+.tbx>[data-hl="dir-agents"],.tbx>[data-hl="dir-tk"]{min-width:720px}
+.tbl th.cbc,.tbl td.cbc{width:46px;padding-right:0}
+.cbb{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;margin:-5px 0;transition:background .15s}
+.cbb:hover{background:var(--soft)}
+.cbb .cb.on{background:var(--accent);box-shadow:none}
+.tbl .ell1{max-width:180px}
+.tbl td .st{white-space:nowrap}
+.tbl td>div>.st{margin-top:4px}
+.pay-foot,.ag-foot{margin-top:12px}
+.pay-f .chipb,.ag-f .chipb{height:36px;cursor:pointer;box-shadow:var(--sh-1),0 0 0 1px var(--line-2)}
+.pay-f .chipb.bad,.ag-f .chipb.bad{box-shadow:0 0 0 1.5px var(--alert)}
+.pay-f select,.ag-f select{width:auto;max-width:240px}
+.ag-f .search{max-width:260px}
+button.kpi{font:inherit;color:inherit;cursor:pointer}
+.kpi.kpib.on{box-shadow:0 0 0 2px var(--alert)}
+.kpi.agc{gap:3px}
+.kpi.agc.on{box-shadow:0 0 0 2px var(--accent)}
+.kpi.agc .agr{font-weight:800;color:var(--ink);margin-right:2px}
+.kpi.agc strong.bad{color:var(--alert)}
+.kpi.agc strong.okc{color:var(--accent-d)}
+/* название агента и метка просрочки переносятся, а не обрезаются (узкие карточки на телефоне) */
+.kpi.agc>span{white-space:normal}
+.kpi.agc .agw{font-style:normal;font-size:11.5px;font-weight:600;color:var(--alert);white-space:normal}
+.kpi.agc .agw.ok0{color:var(--muted);font-weight:500}
+/* блок «Деньги» в карточке груза */
+.mbox h3{display:flex;align-items:center;gap:8px;margin:0;font-size:14px}
+.mbox h3 .ic{width:17px;height:17px;color:var(--accent)}
+.mbox>.row:first-child{margin-bottom:4px}
+.mbox .pline.mini{border-bottom:1px solid var(--line-2)}
+.mbox .mb-tot{padding:10px 0;gap:10px;border-bottom:1px solid var(--line-2)}
+/* окно «Отправить»: стоимость груза по каждому треку и расчёт для клиента */
+.sv-l{display:grid;gap:8px}
+.sv-r{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:var(--soft-2)}
+.sv-t{min-width:0}
+.sv-t b{display:block;font-size:13.5px}
+.sv-t small{display:block;color:var(--muted);font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.sv-t small b{display:inline;color:var(--ink);font-size:12px}
+/* «Настройки»: вкладки и справочники */
+.stabs-w{margin:-4px 0 16px;max-width:100%;overflow-x:auto;scrollbar-width:none}
+.stabs-w::-webkit-scrollbar{display:none}
+.dir-box{display:grid;max-width:760px;padding:6px 18px 16px}
+.dir-r{display:flex;align-items:center;justify-content:space-between;gap:10px 16px;padding:12px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.dir-r>span{min-width:0}
+.dir-r>span b{display:block;font-size:14px}
+.dir-r>span small{display:block;color:var(--muted);font-size:12px}
+.dir-in{display:flex;align-items:center;gap:8px;flex:none}
+.dir-in .inp{width:110px}
+.dir-in em{font-style:normal;color:var(--muted);font-size:12.5px;white-space:nowrap;min-width:92px}
+.dir-f{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:14px}
+.whs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.whc h3{display:flex;align-items:center;gap:8px;margin:0;font-size:15px;min-width:0}
+.whc h3 .ic{width:17px;height:17px;color:var(--accent);flex:none}
+.whc .addr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}
+.whc .addr b{grid-column:1/-1}
+.whc .addr span{min-width:0;overflow-wrap:anywhere}
+.ttf-m.bad{color:var(--alert);font-weight:600}
+.agr-f{margin:0 0 12px}
+.agr-tot{margin-bottom:4px}
+.recon tr.muted td{color:var(--muted)}
+/* быстрый поиск груза в шапке рабочего места */
+.chrome{position:relative;z-index:8}
+.cbar .qs{flex:1 1 340px;max-width:440px;margin-left:auto}
+.cbar .qs+.who{margin-left:12px}
+.cbar .qs~.btn{margin-left:0}
+.qs .inp{height:36px;font-size:13px;padding-left:36px;background:var(--white);border-color:var(--line-2)}
+.qs .ta-i{top:9px;left:11px}
+.qs .ta-i .ic{width:17px;height:17px}
+.qs .ta-l{left:auto;right:0;width:max(100%,460px);max-height:360px}
+.qs .ta-l button{display:grid;gap:1px}
+.qs .ta-l button span{white-space:normal;font-size:12px}
+@container desk (max-width: 900px){
+  .whs{grid-template-columns:minmax(0,1fr)}
+}
+@container desk (max-width: 640px){
+  .pay-f select,.ag-f select{max-width:none;flex:1 1 140px}
+  .ag-f .search{max-width:none}
+  .dir-in{flex:1 1 100%}
+  .dir-in .inp{flex:1}
+}
+@media(max-width:1000px){
+  .cbar .qs{flex-basis:260px}
+}
+@media(max-width:699px){
+  .chrome{display:flex;height:auto;min-height:0;padding:8px 10px}
+  .chrome>i,.cb-t{display:none}
+  .cbar{margin-left:0;flex-wrap:wrap;gap:8px}
+  .cbar .qs{flex:1 1 100%;max-width:none;margin:0;order:5}
+  body[data-as="1"] .chrome{height:auto;padding:8px 10px}
+  .qs .ta-l{left:0;right:0;width:auto}
+  .sv-r{grid-template-columns:minmax(0,1fr)}
+}
+.tbl b.mono{white-space:nowrap}
+.pay-f .search{flex:1 1 260px}
+.tbx>[data-hl="dir-rates"]{min-width:820px}
+[data-hl="dir-rates"] .dir-in .inp{width:76px}
+[data-hl="dir-rates"] .dir-in em{min-width:0}
+[data-hl="dir-rates"] .rt-man{width:110px}
+.rates-f{max-width:none}
+@media(max-width:699px){
+  .agr-tot{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
