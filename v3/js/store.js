@@ -8,7 +8,7 @@
 (function (App) {
   "use strict";
   const u = App.u;
-  const KEY = "cl-demo-v3", UIKEY = "cl-ui-v3", V = 6;
+  const KEY = "cl-demo-v3", UIKEY = "cl-ui-v3", V = 7;
   const ME = "D051"; // клиент, чей телефон показываем
 
   const WH = [
@@ -34,7 +34,7 @@
   // расходы склада в Москве при выдаче, рубли
   const REPX = [["load", "Погрузка"], ["pallet", "Снять паллет"], ["fork", "Кара"], ["other", "Другие"]];
   // взаиморасчёты со складом в Москве: виды операций, знак и подпись
-  const WOPK = { topup: [1, "Пополнение от компании"], client: [1, "Оплата клиента при выдаче"], cube: [-1, "За куб"], route: [-1, "Маршрут с растаможкой"], issueexp: [-1, "Расходы при выдаче"], other: [-1, "Прочий расход"] };
+  const WOPK = { topup: [1, "Пополнение от компании"], client: [1, "Оплата клиента при выдаче"], cube: [-1, "За куб"], dlv: [-1, "Доставка до двери или ТК"], route: [-1, "Маршрут с растаможкой"], issueexp: [-1, "Расходы при выдаче"], other: [-1, "Прочий расход"] };
   const WCUR = { RUB: "₽", USD: "$" };
   // курс: сколько единиц валюты за 1 доллар
   const CUR = {
@@ -58,22 +58,22 @@
   // разделы и функции, которые администратор открывает сотрудникам. Пункты группы «Деньги» открываются по отдельности
   const SECTIONS = [["cargo", "Грузы", "доска и рабочая страница грузов"], ["clients", "Клиенты", "список и карточки клиентов"], ["ships", "Отправки", "в пути, прибывшие, архив, все"],
     ["money", "Оплаты клиентов", "оплаты и долги по трекам и по клиентам"], ["profit", "Расходы и прибыль", "по каждой отправке: выручка, расходы, прибыль"], ["agents", "Агенты", "оплаты перевозчикам по маршрутам, сверка"],
-    ["mskfin", "Склад в Москве", "взаиморасчёты со складом в рублях и долларах"], ["tariffs", "Тарифы клиентов", "ставки за кг, за м³, по плотности"],
-    ["reports", "Отчёты", "объёмы, сроки, выгрузки"], ["history", "История действий", "кто, когда, что сделал"]];
-  const MONEY_SECS = ["money", "profit", "agents", "mskfin", "tariffs"];
+    ["mskfin", "Склад в Москве", "взаиморасчёты со складом в рублях и долларах"], ["chwh", "Склады в Китае", "расходы складов на упаковку"], ["tariffs", "Тарифы клиентов", "ставки за кг, за м³, по плотности"],
+    ["reports", "Отчёты", "объёмы, сроки, выгрузки"], ["news", "Новости и рассылки", "объявления и поздравления клиентам"], ["history", "История действий", "кто, когда, что сделал"]];
+  const MONEY_SECS = ["money", "profit", "agents", "mskfin", "chwh", "tariffs"];
   const FUNCS = [["accept", "Принимать груз", "вносить приход с компьютера"], ["bind", "Привязывать клиента", "разбирать «Неизвестные»"], ["packcmd", "Организовать упаковку", "выбрать грузы клиента, наш трек-номер, задача складу"],
     ["dispatch", "Отправлять грузы", "вид доставки, маршрут, место назначения"], ["arrive", "Отмечать прибытие", "груз прибыл в Москву"], ["issuecmd", "Давать команду на выдачу", "кнопка «Выдать» для прибывших грузов"], ["issue", "Принимать и выдавать", "«Принят», фотоотчёт, выдача или передача в ТК"],
     ["cost", "Видеть стоимость и оплаты", "суммы в долларах, отметка «Оплачено»"], ["route", "Показывать маршрут", "3G, 88G, 89G, 81G в карточках, списках, фильтрах и окнах"], ["way", "Видеть грузы в пути", "вкладка «В пути» в отправках"]];
   // что видно без набора прав: маршрут и грузы в пути показываются, пока администратор их не скрыл
   const FN_ON = ["route", "way"];
   // готовые наборы прав: одной кнопкой, дальше правится вручную. Четвёртое значение: каких клиентов видит (own: только тех, где он указан менеджером)
-  const PRESETS = { wh: ["как кладовщик", "cargo", "accept route way"], manager: ["как менеджер", "cargo clients ships", "accept bind packcmd dispatch arrive issuecmd issue cost route way"], sales: ["как менеджер по продажам", "cargo clients", "packcmd", "own"],
-    acc: ["как бухгалтер", "ships money profit agents mskfin tariffs reports", "cost route way"], mskwh: ["как склад в Москве", "ships", "issue route", "all"] };
+  const PRESETS = { wh: ["как кладовщик", "cargo", "accept route way"], manager: ["как менеджер", "cargo clients ships", "accept bind packcmd dispatch arrive issuecmd issue cost way"], sales: ["как менеджер по продажам", "cargo clients", "packcmd", "own"],
+    acc: ["как бухгалтер", "ships money profit agents mskfin chwh tariffs reports", "cost route way"], mskwh: ["как склад в Москве", "ships", "issue route", "all"] };
   const ACCESS0 = {
     olga: { s: "cargo clients ships", f: "accept bind packcmd dispatch arrive issuecmd cost route way", scope: "all" },
     timur: { s: "cargo clients", f: "packcmd", scope: "own", preset: "sales" },
     darya: { s: "cargo clients", f: "packcmd", scope: "own", preset: "sales" },
-    natalia: { s: "ships money profit agents mskfin tariffs reports", f: "cost route way", scope: "all" },
+    natalia: { s: "ships money profit agents mskfin chwh tariffs reports", f: "cost route way", scope: "all" },
     sergey: { s: "ships", f: "issue route", scope: "all", preset: "mskwh" },
   };
   // тарифы: сетка по плотности, кг/м³
@@ -98,15 +98,21 @@
   const BASIS_T = { kg: "за кг", m3: "за м³" };
   const WH_RU = { yiwu: ["Иу, провинция Чжэцзян", "Иу, район Футянь, проспект Шанчэн, 88, склад 3"], gz: ["Гуанчжоу, провинция Гуандун", "Гуанчжоу, район Байюнь, улица Цинфэн, 26, корпус B"],
     fs: ["Фошань, провинция Гуандун", "Фошань, район Наньхай, улица Сянань, 15, склад 2"], sz: ["Шэньчжэнь, провинция Гуандун", "Шэньчжэнь, район Баоань, проспект Фэнтан, 102, склад A"] };
+  // этапы пути по умолчанию: через сколько дней после отправки груз на границе и на таможне
+  const STG = (b, c) => [{ name: "На границе", day: b }, { name: "Таможенное оформление", day: c }];
   function dir0() {
     return {
       agents: [
-        { route: "3G", name: "Хоргос Карго Лайн", basis: "kg", rate: 1.2, customs: 0.25, days: 16, contact: "+7 900 000-00-51" },
-        { route: "88G", name: "Алтын Жол Логистик", basis: "kg", rate: 1.1, customs: 0.25, days: 18, contact: "+7 900 000-00-52" },
-        { route: "89G", name: "Сибирский Мост", basis: "m3", rate: 180, customs: 0.2, days: 17, contact: "+7 900 000-00-53" },
-        { route: "81G", name: "Шёлковый Путь Транс", basis: "m3", rate: 165, customs: 0.2, days: 24, contact: "+7 900 000-00-54" },
+        { route: "3G", name: "Хоргос Карго Лайн", basis: "kg", rate: 1.2, customs: 0.25, days: 16, contact: "+7 900 000-00-51", stages: STG(4, 12), spread: 2, grow: 2 },
+        { route: "88G", name: "Алтын Жол Логистик", basis: "kg", rate: 1.1, customs: 0.25, days: 18, contact: "+7 900 000-00-52", stages: STG(4, 14), spread: 3, grow: 1.5 },
+        { route: "89G", name: "Сибирский Мост", basis: "m3", rate: 180, customs: 0.2, days: 17, contact: "+7 900 000-00-53", stages: STG(5, 13), spread: 2, grow: 1.5 },
+        { route: "81G", name: "Шёлковый Путь Транс", basis: "m3", rate: 165, customs: 0.2, days: 24, contact: "+7 900 000-00-54", stages: STG(7, 18), spread: 3, grow: 1 },
       ],
+      // версия 3.3: видит ли клиент маршрут (агента) в своём кабинете; по умолчанию нет
+      clientRoute: false,
       pack: { bag: 1, wbox: 8, crate: 15, pallet: 25 },
+      // версия 3.3: наша цена упаковки на складе в Китае, юани за единицу; у склада может быть своя цена (whPack)
+      packCny: { bag: 4, crate: 70, pallet: 150, wbox: 40 }, whPack: {},
       insPct: 2,
       whs: WH.map((w) => ({ id: w.id, ru: w.ru, zh: w.zh, city: WH_RU[w.id][0], addrRu: WH_RU[w.id][1], addr: w.addr })),
       tks: [{ name: "СДЭК", contact: "+7 900 000-00-61", note: "посылки и небольшие партии" }, { name: "Деловые линии", contact: "+7 900 000-00-62", note: "сборные грузы по России" }, { name: "ПЭК", contact: "+7 900 000-00-63", note: "крупные партии, паллеты" }],
@@ -130,12 +136,50 @@
   function agentCalc(route, weight, volume, d) { const a = agentOf(route, d); if (!a) return 0; return Math.round((a.basis === "m3" ? volume * a.rate : weight * a.rate) + (a.customs || 0) * weight); }
   // упаковка для клиента: цена за место по видам упаковки
   const packCost = (packs, d) => Math.round(PACK.reduce((a, k) => a + (+(packs || {})[k] || 0) * ((d || S.dir).pack[k] || 0), 0) * 100) / 100;
+  // наши расходы на упаковку груза: количество по видам × цена склада в юанях, в долларах по курсу из настроек
+  const packCnyOf = (whId, k, d) => { d = d || S.dir; const o = (d.whPack || {})[whId]; return o && o[k] != null ? o[k] : (d.packCny || {})[k] || 0; };
+  const packExpCny = (c, d) => PACK.reduce((a, k) => a + (+(c.packs || {})[k] || 0) * packCnyOf(c.wh, k, d), 0);
+  const packExpUsd = (c, d) => Math.round(packExpCny(c, d) / CUR.CNY.rate);
   const insCalc = (value, d) => Math.round(((+value || 0) * (d || S.dir).insPct) / 100);
   // ожидаемый срок в пути: у агента свой срок, авиа быстрее
   const etaDays = (route, transport, d) => { const a = agentOf(route, d); return transport === "air" || !a || !a.days ? TRANSPORT[transport].days : a.days; };
   // стоимость для клиента складывается из доставки по тарифу, упаковки, страховки, расходов в Китае и расходов при выдаче за счёт клиента
-  const recost = (s) => { s.cost = r2((s.deliv || 0) + (s.packUsd || 0) + (s.insUsd || 0) + (s.doorUsd || 0) + (s.issueExpUsd || 0)); return s; };
+  const recost = (s) => { s.cost = r2((s.deliv || 0) + (s.packUsd || 0) + (s.insUsd || 0) + (s.doorUsd || 0) + (s.issueExpUsd || 0) + (s.dlvUsd || 0)); return s; };
   const cnyUsd = (cny) => Math.round(cny / CUR.CNY.rate);
+  // ---------- версия 3.3: шкала пути ----------
+  // После отправки шкала сама идёт по дням: этапы агента (через сколько дней после отправки) меняют промежуточный статус,
+  // внутри этапа шкала подрастает на «прирост в день» агента. Потолок до отметки «Прибыл в Москву» 95%, после неё 100%.
+  // Начало этапов: отправка 5%, последний этап (обычно таможня) 85%, промежуточные по дням между ними.
+  const TRIP_CEIL = 95, TRIP_P0 = 5, TRIP_PL = 85;
+  const SENT_T = "Отправлен из Китая";
+  function trip(s, at) {
+    at = at || Date.now();
+    const a = agentOf(s.route) || {}, dd = Math.max(1, (s.eta - s.sentAt) / u.DAY), base = a.days > 0 ? a.days : dd, k = dd / base, grow = a.grow > 0 ? +a.grow : 0;
+    const list = [{ name: SENT_T, day: 0 }].concat((a.stages || []).filter((x) => x && String(x.name || "").trim() && +x.day > 0).map((x) => ({ name: String(x.name).trim(), day: +x.day * k })).sort((x, y) => x.day - y.day));
+    const last = list[list.length - 1].day;
+    list.forEach((x, i) => { x.pct = i === 0 ? TRIP_P0 : TRIP_P0 + ((TRIP_PL - TRIP_P0) * x.day) / last; x.at = s.sentAt + x.day * u.DAY; });
+    const spread = Math.max(0, +a.spread || 0), from = s.eta - spread * u.DAY, to = s.eta + spread * u.DAY;
+    const arrived = s.status !== "way" && s.arrivedAt && s.arrivedAt <= at + 1;
+    if (arrived) { list.forEach((x) => { x.done = true; }); return { pct: 100, idx: list.length - 1, name: "Прибыл в Москву", stages: list, from, to, arrived: true, auto: false }; }
+    const el = Math.max(0, (at - s.sentAt) / u.DAY);
+    let idx = 0; list.forEach((x, i) => { if (x.day <= el) idx = i; });
+    let pct;
+    if (list.length === 1) pct = Math.max(TRIP_P0 + grow * el, TRIP_P0 + ((TRIP_CEIL - TRIP_P0) * el) / dd);
+    else pct = list[idx].pct + grow * (el - list[idx].day);
+    const cap = idx < list.length - 1 ? list[idx + 1].pct - 2 : TRIP_CEIL;
+    pct = Math.max(list[idx].pct, Math.min(pct, cap, TRIP_CEIL));
+    list.forEach((x, i) => { x.done = i <= idx; });
+    return { pct: Math.round(pct * 10) / 10, idx, name: list[idx].name, stages: list, from, to, arrived: false, auto: true };
+  }
+  // диапазон даты прибытия: «10-15 декабря» или «28 ноября - 3 декабря»
+  function rangeText(from, to) {
+    const a = new Date(from), b = new Date(to);
+    if (u.dLong(from) === u.dLong(to)) return u.dLong(from);
+    return a.getMonth() === b.getMonth() ? a.getDate() + "-" + u.dLong(to) : u.dLong(from) + " - " + u.dLong(to);
+  }
+  // маршрут в кабинете клиента: по умолчанию скрыт настройкой «Клиент видит маршрут»
+  const clientRoute = () => !!(S && S.dir && S.dir.clientRoute);
+  const cText = (t) => (clientRoute() ? String(t) : String(t).replace(new RegExp(",?\\s*маршрут (" + ROUTES.join("|") + ")(?![A-Za-z0-9])", "g"), ""));
   const recsWord = (n) => n + " " + u.plural(n, "приход", "прихода", "приходов");
 
   const packsSum = (p) => PACK.reduce((a, k) => a + (p[k] || 0), 0);
@@ -155,7 +199,7 @@
     packed: (c) => `Упаковка: ${c.id}, ${packsText(c.packs)}, ${u.kg(c.weight)}, ${u.vol(c.volume)}`,
     dispatch: (s) => `Отправка: ${s.id}, ${TRANSPORT[s.transport].low}, маршрут ${s.route}, ${s.dest}${s.cost ? ", " + u.usd(s.cost) : ""}`,
     arrive: (s) => `Прибытие: груз ${s.id} прибыл в Москву, лежит на хранении`,
-    issuecmd: (o) => `Заказ на выдачу: ${o.id}, клиент ${o.clientId}, ${tracksWord(o.shipIds.length)}, ${WAY[o.way].low}${o.way === "tk" && o.tk ? " " + o.tk : ""}${o.collect ? ", получить оплату " + rub(o.collectRub) : ""}, расходы платит ${o.payer === "client" ? "клиент" : "компания"}`,
+    issuecmd: (o) => `Заказ на выдачу: ${o.id}, клиент ${o.clientId}, ${tracksWord(o.shipIds.length)}, ${WAY[o.way].low}${o.way === "tk" && o.tk ? " " + o.tk : ""}${o.collect ? ", получить оплату " + rub(o.collectRub) : ""}, расходы платит ${o.payer === "client" ? "клиент" : "компания"}${o.dlv ? ", " + dlvText(o).toLowerCase() : ""}`,
     issueacc: (o) => `Принят складом в Москве: заказ ${o.id}, ${tracksWord(o.shipIds.length)} в работе`,
     issue: (s) => (s.issue.type === "tk" ? `Передача в ТК: груз ${s.id}, ${s.issue.tk}, накладная ${s.issue.waybill}` : `Выдача: груз ${s.id} выдан клиенту ${s.clientId}${s.issue.way === "door" ? ", доставка до двери" : ""}`) + (repSum(s.rep) ? `, расходы ${rub(repSum(s.rep))}` : "") + (s.rep && s.rep.damage ? ", есть повреждение" : ""),
     collect: (o, sum) => `Оплата при выдаче: заказ ${o.id}, клиент ${o.clientId}, получено ${rub(sum)}`,
@@ -237,7 +281,7 @@
         arrivedAt: o.arr != null ? ago(o.arr) : null, arrBy: o.arr != null ? by : null, doneAt: o.done != null ? now - o.done * D : null, doneBy: o.done != null ? "sergey" : null,
         issue: null, rep: null, cost, deliv: base, packUsd, insUsd, value, insManual: false, agentUsd, agentManual: false, agentPaid: 0, doorUsd: 0, doorCny: 0, issueExpRub: expUsd ? expRub : 0, issueExpUsd: expUsd, paidUsd: Math.round(cost * (o.paid || 0)),
         docs: [{ name: "Упаковочный лист " + c.id + ".pdf", at: sentAt, by }],
-        exp: { pack: Math.round(c.places * packRate), carrier: agentUsd, other: Math.round(base * 0.02) } };
+        exp: { pack: packExpUsd(c, dir), carrier: agentUsd, other: Math.round(base * 0.02) } };
       if (o.docs) o.docs.forEach((n) => s.docs.push({ name: n + " " + c.id + ".pdf", at: sentAt + D, by }));
       if (done) {
         const tk = o.issue && o.issue.type === "tk", way = tk ? "tk" : client.recv.way === "door" ? "door" : "pickup", got = o.got ? Math.round((cost * CUR.RUB.rate) / 10) * 10 : 0;
@@ -304,6 +348,15 @@
     rec("yiwu", "W001", "Hangzhou Silk Road", 6, 0.28);
     rec("gz", "M112", "Dongguan Homeware", 11, 0.25);
 
+    // версия 3.3: ещё три груза клиента D051 в пути с разными датами отправки, чтобы шкала пути стояла в разных местах:
+    // только отправлен, на таможне, почти полная (плюс груз на границе выше). Номера и счётчики не сдвигают остальные данные демо
+    const keep = { tt, rn, rs };
+    tt = 2680; rn = 280;
+    ship(cargo("yiwu", "D051", "Кабели и зарядки", { bag: 12 }, 150, 0.8, 2, [["Yiwu Hongda Trading", 12, 1]]), "auto", "3G", 1, { status: "way" });
+    ship(cargo("fs", "D051", "Настольные лампы", { crate: 6 }, 180, 1.2, 17, [["Foshan Mingde Lighting", 6, 1]]), "auto", "88G", 15, { status: "way", paid: 1, cur: "RUB" });
+    ship(cargo("yiwu", "D051", "Чайники и блендеры", { wbox: 10 }, 220, 1.4, 17, [["Yiwu Hongda Trading", 10, 1]]), "auto", "3G", 15, { status: "way", docs: ["Инвойс"] });
+    tt = keep.tt; rn = keep.rn; rs = keep.rs;
+
     // взаиморасчёты со складом в Москве за месяц: рубли в плюсе, доллары в минусе
     const W = (at, kind, cur, amount, x) => wops.push(Object.assign({ at: typeof at === "number" ? now - at * D : today, kind, cur, amount: WOPK[kind][0] * amount, by: kind === "topup" ? "ramil" : "sergey" }, x || {}));
     W(27, "topup", "RUB", 300000, { note: "на расходы склада" });
@@ -366,6 +419,15 @@
       { clientId: ME, text: `Груз ${mine.id} отправлен: авто, маршрут ${mine.route}, ${mine.dest}. Прибытие около ${u.dLong(mine.eta)}. Стоимость ${u.usd(mine.cost)}.`, at: mine.sentAt, read: true, ref: { t: "ship", id: mine.id } },
     ]).sort((a, b) => b.at - a.at);
     notes.forEach((n, i) => { n.id = notes.length - i; });
+    // версия 3.3: новости и рассылки. Прочитали: часть клиентов; у клиента D051 одна новость не прочитана
+    const allC = clients.map((c) => c.id), rd = (ids, at) => Object.assign({}, ...ids.map((id, i) => ({ [id]: at + (i + 1) * 3600e3 })));
+    const ny = new Date(now); ny.setMonth(11, 30); ny.setHours(10, 0, 0, 0); if (ny.getTime() < now + D) ny.setFullYear(ny.getFullYear() + 1);
+    const news = [
+      { id: 1, kind: "greet", title: "Спасибо, что вы с нами!", text: "Сегодня нашей компании пять лет. Спасибо, что доверяете нам свои грузы. Впереди новые маршруты и удобный кабинет, где видно каждый груз от склада в Китае до выдачи.", img: null, to: "all", clients: [], status: "sent", at: now - 20 * D, by: "ramil", reads: rd(allC.filter((c) => c !== "M112"), now - 20 * D) },
+      { id: 2, kind: "info", title: "График работы складов в праздники", text: "Склады в Китае не работают с 1 по 17 февраля: Праздник весны. Грузы, принятые до 25 января, отправим до праздников. Склад в Москве работает без перерыва. Пожалуйста, планируйте заказы заранее.", img: { p: 1, kind: "pallet" }, to: "all", clients: [], status: "sent", at: now - 6 * D, by: "olga", reads: rd(["D051", "W001", "K014", "A023", "T045"], now - 6 * D) },
+      { id: 3, kind: "important", title: "Важно: тарифы с 1 декабря", text: "С 1 декабря для лёгких грузов (плотность меньше 100 кг/м³) авто доставка стоит 340 $ за м³ вместо 330 $. Для остальных грузов тарифы прежние. Грузы, отправленные до 1 декабря, считаются по старым тарифам.", img: null, to: "all", clients: [], status: "sent", at: now - 0.3 * D, by: "ramil", reads: rd(["W006", "K014"], now - 0.3 * D) },
+      { id: 4, kind: "greet", title: "С наступающим Новым годом!", text: "Поздравляем с Новым годом! Спасибо за доверие в этом году. Склад в Москве 1 и 2 января не работает, склады в Китае работают в обычном режиме.", img: null, to: "all", clients: [], status: "sched", at: ny.getTime(), by: "ramil", reads: {} },
+    ];
     return {
       v: V, clients, receipts, tasks, cargos, ships, payments, issues, wops, staff, access, hide: {}, log, dir, apays,
       expected: [
@@ -375,14 +437,14 @@
         { id: "E-31", clientId: "T045", track: track(), supplier: "Jinhua Sport Goods", what: "Спортинвентарь, 12 мест", at: now - 3.1 * D },
       ],
       notes,
-      seq: { rec: rn + 1, tt: tt + 1, note: notes.length + 1, exp: 35, pay: pn, log: log.length + 1, staff: 1, iss: on + 1, wop: wops.length + 1, apay: apays.length + 1, wh: 1 },
-      tg: false, createdAt: now,
+      seq: { rec: rn + 1, tt: tt + 1, note: notes.length + 1, exp: 35, pay: pn, log: log.length + 1, staff: 1, iss: on + 1, wop: wops.length + 1, apay: apays.length + 1, wh: 1, news: 5 },
+      news, tg: false, createdAt: now,
     };
   }
 
   let S = null;
   function load() {
-    try { const raw = localStorage.getItem(KEY); if (raw) { const v = JSON.parse(raw); if (v && v.v === V && v.receipts && v.tasks && v.log && v.staff && v.hide && v.issues && v.wops && v.dir && v.apays && v.seq && v.seq.tt && v.seq.iss) { S = v; applyDir(S.dir); return; } } } catch (e) { /* хранилище недоступно */ }
+    try { const raw = localStorage.getItem(KEY); if (raw) { const v = JSON.parse(raw); if (v && v.v === V && v.receipts && v.tasks && v.log && v.staff && v.hide && v.issues && v.wops && v.dir && v.apays && v.news && v.seq && v.seq.tt && v.seq.iss) { S = v; applyDir(S.dir); return; } } } catch (e) { /* хранилище недоступно */ }
     S = seed();
   }
   let saveT = 0;
@@ -592,7 +654,7 @@
     const dims = (d.dims || []).map((x) => ({ l: +x.l || 0, w: +x.w || 0, h: +x.h || 0, n: parseInt(x.n, 10) || 0 })).filter((x) => x.l && x.w && x.h && x.n);
     const places = dimsPlaces(dims) || packsSum(packs) || taskPlaces(t);
     const c = { id: t.id, wh: t.wh, clientId: t.clientId, taskId: t.id, name: t.name, packs, packType: PACK.filter((k) => packs[k]).sort((a, b) => packs[b] - packs[a])[0] || t.packPlan[0] || "bag", dims, places,
-      weight: Math.max(0, +d.weight || 0), volume: dimsVolume(dims), photos: (d.photos || []).slice(), note: String(d.note || "").trim().slice(0, 200), transport: t.transport, at: Date.now(), by: d.by || WH_STAFF[t.wh], sent: 0, receiptIds: t.receiptIds.slice(), value: t.value || 0, fresh: true };
+      weight: Math.max(0, +d.weight || 0), volume: +d.volume > 0 ? r2(+d.volume) : dimsVolume(dims), volManual: +d.volume > 0, photos: (d.photos || []).slice(), note: String(d.note || "").trim().slice(0, 200), transport: t.transport, at: Date.now(), by: d.by || WH_STAFF[t.wh], sent: 0, receiptIds: t.receiptIds.slice(), value: t.value || 0, fresh: true };
     t.receiptIds.forEach((id) => { const r = rec(id); if (r) { r.cargoId = c.id; r.fresh = false; } });
     t.status = "done"; t.doneAt = c.at; t.doneBy = c.by; t.fresh = false;
     // склад указывает, во что упаковал на самом деле; расхождение с заказанным видно администратору и пишется в историю
@@ -617,7 +679,7 @@
         agentUsd, agentManual: false, agentPaid: 0, doorCny, doorUsd, issueExpRub: 0, issueExpUsd: 0, paidUsd: 0, docs: [], exp: { pack: 0, carrier: 0, other: 0 }, fresh: true };
       recost(s);
       c.sent = c.places; c.fresh = false; c.value = value; c.receiptIds.forEach((id) => { const r = rec(id); if (r) r.charged = true; });
-      s.exp = { pack: Math.round(c.places * 1.5), carrier: agentUsd, other: Math.round(s.cost * 0.02) };
+      s.exp = { pack: packExpUsd(c), carrier: agentUsd, other: Math.round(s.cost * 0.02) };
       S.ships.push(s);
       notify(c.clientId, `Груз ${s.id} отправлен: ${TRANSPORT[tr].low}, маршрут ${s.route}, ${s.dest}. Прибытие около ${u.dLong(s.eta)}.${s.cost ? " Стоимость " + u.usd(s.cost) + (doorUsd ? ", включая расходы в Китае " + u.usd(doorUsd) : "") + "." : ""}`, { t: "ship", id: s.id });
       logAdd("dispatch", s.by, LT.dispatch(s), chainIds("ship", s), c.clientId);
@@ -651,7 +713,7 @@
     if (d.dest && String(d.dest).trim() !== s.dest) { s.dest = String(d.dest).trim(); ch.push("место назначения " + s.dest); }
     if (d.date && Math.abs(d.date - s.sentAt) > 12 * 3600e3) { s.sentAt = d.date; ch.push("дата " + u.dShort(s.sentAt)); }
     // общая стоимость правится через доставку: остальные части (упаковка, страховка, расходы) не меняются
-    if (d.cost != null && Math.round(d.cost) !== Math.round(s.cost) && d.cost >= 0) { s.deliv = Math.max(0, r2(s.deliv + Math.round(d.cost) - s.cost)); recost(s); ch.push("стоимость " + u.usd(s.cost)); }
+    if (d.cost != null && Math.round(d.cost) !== Math.round(s.cost) && d.cost >= 0) { s.deliv = Math.max(0, r2(s.deliv + Math.round(d.cost) - s.cost)); s.dmode = "sum"; recost(s); ch.push("стоимость " + u.usd(s.cost)); }
     if (!ch.length) return s;
     s.eta = s.sentAt + etaDays(s.route, s.transport) * u.DAY;
     logAdd("edit", by, `Изменение отправки: ${s.id}, ${ch.join(", ")}`, chainIds("ship", s), s.clientId);
@@ -670,15 +732,53 @@
   // ---------- выдача: команда администратора, «Принят» у склада в Москве, фотоотчёт и «Готово» ----------
   const issueIds = (o) => issueShips(o).reduce((a, s) => a.concat(chainIds("ship", s)), []).concat(o.id);
   // заказ на выдачу: один или несколько треков одного клиента, которые лежат на хранении
+  // ---------- версия 3.3: доставка до двери или транспортной компанией в заказе на выдачу ----------
+  // платит клиент: сумма прибавляется к стоимости треков (делится по весу) и к оплате при выдаче;
+  // платим мы: наш расход по грузу, а если платит склад в Москве, операция во взаиморасчётах после выдачи
+  const dlvLabel = (o) => (o.way === "tk" ? "Доставка ТК" : "Доставка до двери");
+  const dlvText = (o) => (o.dlv ? `${dlvLabel(o)}: платит ${o.dlv.payer === "client" ? "клиент" : o.dlv.wh ? "склад в Москве за нас" : "компания"}, ${o.dlv.rub ? rub(o.dlv.rub) : "сумма будет позже"}` : "");
+  function dlvSpread(o, list) {
+    const ss = list || issueShips(o), sum = o.dlv ? o.dlv.rub : 0, W = ss.reduce((a, s) => a + (totals(s).weight || 1), 0) || 1;
+    let left = sum;
+    ss.forEach((s, i) => {
+      const part = !o.dlv ? 0 : i === ss.length - 1 ? left : Math.round((sum * (totals(s).weight || 1)) / W); left -= part;
+      const cl = o.dlv && o.dlv.payer === "client";
+      s.dlvRub = cl ? part : 0; s.dlvUsd = cl ? Math.round(rubUsd(part)) : 0; s.dlvWay = o.dlv ? o.way : null;
+      s.exp.dlv = !cl && o.dlv ? Math.round(rubUsd(part)) : 0; recost(s);
+    });
+  }
+  // уточнить сумму доставки (в фотоотчёте или позже): пересчёт стоимости треков и оплаты при выдаче
+  function setDlv(id, v, by, quiet) {
+    const o = issueOrder(id); if (!o || !o.dlv) return null;
+    const nv = Math.max(0, Math.round(+v || 0)), was = o.dlv.rub; if (nv === was) return o;
+    o.dlv.rub = nv;
+    if (o.dlv.payer === "client" && o.collect && !o.gotRub) o.collectRub = Math.max(0, o.collectRub + nv - was);
+    dlvSpread(o, issueShips(o).filter((s) => s.issueId === o.id));
+    logAdd("issuecmd", by || "sergey", `${dlvLabel(o)}: заказ ${o.id}, было ${was ? rub(was) : "не указано"}, стало ${rub(nv)}, платит ${o.dlv.payer === "client" ? "клиент" : "компания"}`, issueIds(o), o.clientId);
+    if (o.dlv.payer === "client") notify(o.clientId, `${dlvLabel(o)} по ${o.shipIds.length > 1 ? "грузам " + o.shipIds.join(", ") : "грузу " + o.shipIds[0]}: ${rub(nv)}, добавлено к стоимости.`, { t: "ship", id: o.shipIds[0] });
+    if (!quiet) changed();
+    return o;
+  }
+  // блок выдачи одним текстом для кнопки «Копировать»: способ выдачи, получатель, адрес, доставка
+  function issueText(x) {
+    const r = x.recv || {}, way = WAY[x.way] ? x.way : "pickup", lines = [`Способ выдачи: ${WAY[way].t}${way === "tk" && x.tk ? ": " + x.tk : ""}`];
+    lines.push(`Получатель: ${[String(r.name || "").trim() || "не указан", String(r.phone || "").trim()].filter(Boolean).join(", ")}`);
+    if (way !== "pickup" && String(r.addr || "").trim()) lines.push(`Адрес: ${String(r.addr).trim()}`);
+    if (way !== "pickup" && x.dlv && x.dlv.rub > 0) lines.push(dlvText(Object.assign({}, x, { way })));
+    return lines.join("\n");
+  }
   function issueCreate(shipIds, d) {
     const list = shipIds.map(ship).filter((s) => s && s.status === "arrived" && s.sub === "store"); if (!list.length) return null;
     const ss = list.filter((s) => s.clientId === list[0].clientId), c = client(ss[0].clientId), r = c.recv || {}, x = d.recv || {}, way = WAY[d.way] ? d.way : WAY[r.way] ? r.way : "pickup", now = Date.now();
     const o = { id: "В-0" + S.seq.iss++, clientId: c.id, shipIds: ss.map((s) => s.id), recv: { name: String(x.name || "").trim().slice(0, 60), phone: String(x.phone || "").trim().slice(0, 30), addr: String(x.addr || "").trim().slice(0, 160) },
-      way, tk: way === "tk" ? String(d.tk || r.tk || TK[0]).trim().slice(0, 40) : "", payer: d.payer === "client" ? "client" : "us", collect: !!d.collect && +d.collectRub > 0, collectRub: d.collect ? Math.max(0, Math.round(+d.collectRub || 0)) : 0, gotRub: 0, gotAt: null, gotBy: null,
-      note: String(d.note || "").trim().slice(0, 200), status: "ready", at: now, by: d.by || "ramil", acceptedAt: null, acceptedBy: null, doneAt: null, doneBy: null, fresh: true };
+      way, tk: way === "tk" ? String(d.tk || r.tk || TK[0]).trim().slice(0, 40) : "", payer: d.payer === "client" ? "client" : "us", collect: !!d.collect && (+d.collectRub > 0 || (way !== "pickup" && !!d.dlv && d.dlv.payer !== "us" && +d.dlv.rub > 0)), collectRub: d.collect ? Math.max(0, Math.round(+d.collectRub || 0)) : 0, gotRub: 0, gotAt: null, gotBy: null,
+      note: String(d.note || "").trim().slice(0, 200), status: "ready", at: now, by: d.by || "ramil", acceptedAt: null, acceptedBy: null, doneAt: null, doneBy: null, fresh: true,
+      dlv: way !== "pickup" && d.dlv ? { payer: d.dlv.payer === "us" ? "us" : "client", rub: Math.max(0, Math.round(+d.dlv.rub || 0)), wh: d.dlv.payer === "us" && d.dlv.wh !== false } : null };
+    if (o.dlv && o.dlv.payer === "client" && o.collect) o.collectRub += o.dlv.rub;
     ss.forEach((s) => { s.sub = "ready"; s.issueId = o.id; s.fresh = false; });
+    if (o.dlv) dlvSpread(o, ss);
     S.issues.push(o);
-    notify(c.id, `${ss.length > 1 ? "Грузы " + o.shipIds.join(", ") + " готовы" : "Груз " + o.shipIds[0] + " готов"} к выдаче: ${WAY[way].low}${way === "tk" ? " " + o.tk : ""}${o.recv.addr && way !== "pickup" ? ", " + o.recv.addr : ""}.${o.collect ? " К оплате при выдаче " + rub(o.collectRub) + "." : ""}`, { t: "ship", id: o.shipIds[0] });
+    notify(c.id, `${ss.length > 1 ? "Грузы " + o.shipIds.join(", ") + " готовы" : "Груз " + o.shipIds[0] + " готов"} к выдаче: ${WAY[way].low}${way === "tk" ? " " + o.tk : ""}${o.recv.addr && way !== "pickup" ? ", " + o.recv.addr : ""}.${o.dlv && o.dlv.payer === "client" && o.dlv.rub ? " " + dlvLabel(o) + " " + rub(o.dlv.rub) + " добавлена к стоимости." : ""}${o.collect ? " К оплате при выдаче " + rub(o.collectRub) + "." : ""}`, { t: "ship", id: o.shipIds[0] });
     logAdd("issuecmd", o.by, LT.issuecmd(o), issueIds(o), c.id);
     changed(); emit("issuecmd", o);
     return o;
@@ -696,7 +796,7 @@
   function issueCancel(id, by) {
     const o = issueOrder(id); if (!o || o.status === "done") return null;
     const ids = issueIds(o), back = issueShips(o).filter((s) => s.status === "arrived"), kept = issueShips(o).filter((s) => s.status === "done");
-    back.forEach((s) => { s.sub = "store"; s.issueId = null; });
+    back.forEach((s) => { s.sub = "store"; s.issueId = null; if (s.dlvRub || (s.exp && s.exp.dlv)) { s.dlvRub = 0; s.dlvUsd = 0; s.exp.dlv = 0; s.dlvWay = null; recost(s); } });
     if (kept.length) { o.shipIds = kept.map((s) => s.id); o.status = "done"; o.doneAt = Math.max(...kept.map((s) => s.doneAt)); o.doneBy = kept[kept.length - 1].doneBy; }
     else S.issues = S.issues.filter((x) => x.id !== id);
     logAdd("delete", by, `Отмена заказа на выдачу: ${o.id}, ${tracksWord(back.length)} снова на хранении`, ids, o.clientId);
@@ -730,6 +830,7 @@
   function issueDone(shipId, d) {
     const s = ship(shipId), o = issueOf(s); if (!s || !o || s.status !== "arrived" || s.sub !== "issuing") return null;
     const p = d.by || "sergey", exp = {}, now = Date.now();
+    if (o.dlv && d.dlvRub != null && String(d.dlvRub) !== "") setDlv(o.id, d.dlvRub, p, true);
     REPX.forEach(([k]) => { exp[k] = Math.max(0, Math.round(+(d.exp || {})[k] || 0)); });
     s.rep = { photos: (d.photos || []).slice(), damage: d.damage ? String(d.damage).trim().slice(0, 200) : "", exp, note: String(d.note || "").trim().slice(0, 200), waybill: o.way === "tk" ? String(d.waybill || "").trim().slice(0, 40) || "без номера" : "", at: now, by: p };
     s.status = "done"; s.sub = null; s.doneAt = now; s.doneBy = p; s.fresh = false;
@@ -740,7 +841,11 @@
       // расходы за счёт клиента прибавляются к стоимости груза: клиент видит их в кабинете
       if (o.payer === "client") { s.issueExpRub = x; s.issueExpUsd = Math.round(rubUsd(x)); recost(s); }
     }
-    if (issueShips(o).every((y) => y.status === "done")) { o.status = "done"; o.doneAt = now; o.doneBy = p; }
+    if (issueShips(o).every((y) => y.status === "done")) {
+      o.status = "done"; o.doneAt = now; o.doneBy = p;
+      // доставку оплатил склад в Москве за нас: расход во взаиморасчётах
+      if (o.dlv && o.dlv.payer === "us" && o.dlv.wh && o.dlv.rub > 0) wopPush({ kind: "dlv", cur: "RUB", amount: -o.dlv.rub, orderId: o.id, clientId: o.clientId, by: p, note: o.way === "tk" ? o.tk : "" });
+    }
     notify(s.clientId, (s.issue.type === "tk" ? `Груз ${s.id} передан в транспортную компанию ${s.issue.tk}, накладная ${s.issue.waybill}.` : `Груз ${s.id} выдан${o.way === "door" ? ": доставлен до двери" : ""}. Спасибо, что работаете с нами!`) + (x && o.payer === "client" ? ` Расходы при выдаче ${rub(x)} добавлены к стоимости.` : ""), { t: "ship", id: s.id });
     logAdd("issue", p, LT.issue(s), chainIds("ship", s).concat(o.id), s.clientId);
     changed(); emit("issued", s);
@@ -750,7 +855,7 @@
   function wopPush(d) { const w = Object.assign({ id: S.seq.wop++, at: Date.now(), note: "" }, d); S.wops.push(w); return w; }
   // пополнение от компании или расход: за куб (объём × ставка), перевозчику за маршрут с растаможкой, прочий
   function wopAdd(d) {
-    const kind = WOPK[d.kind] && d.kind !== "client" && d.kind !== "issueexp" ? d.kind : "other", cur = d.cur === "USD" ? "USD" : "RUB";
+    const kind = WOPK[d.kind] && d.kind !== "client" && d.kind !== "issueexp" && d.kind !== "dlv" ? d.kind : "other", cur = d.cur === "USD" ? "USD" : "RUB";
     const vol = kind === "cube" ? Math.max(0, +d.vol || 0) : 0, rate = kind === "cube" ? Math.max(0, +d.rate || 0) : 0, sum = Math.round((kind === "cube" ? vol * rate : Math.max(0, +d.amount || 0)) * 100) / 100;
     if (!(sum > 0)) return null;
     const w = wopPush({ kind, cur, amount: WOPK[kind][0] * sum, by: d.by || "sergey", note: String(d.note || "").trim().slice(0, 120) });
@@ -774,6 +879,7 @@
     if (w.kind === "cube") return { t, s: `${u.vol(w.vol)} × ${wamt(w.rate, w.cur)}${w.route ? " · маршрут " + w.route : ""}${w.agent ? " · " + w.agent : ""}${w.note ? " · " + w.note : ""}` };
     if (w.kind === "client") return { t, s: `${w.clientId} ${(client(w.clientId) || {}).name || ""} · заказ ${w.orderId}` };
     if (w.kind === "issueexp") return { t, s: `груз ${w.shipId} · ${w.clientId}` };
+    if (w.kind === "dlv") return { t, s: `заказ ${w.orderId} · ${w.clientId}${w.note ? " · " + w.note : ""}` };
     return { t, s: [w.route ? "маршрут " + w.route : "", w.agent ? "агент " + w.agent : "", w.note].filter(Boolean).join(" · ") };
   }
   function setPaid(id, paid, by) {
@@ -878,8 +984,8 @@
     changed(); emit("paid", p);
     return p;
   }
-  function setExp(id, exp) { const s = ship(id); if (s) { s.exp = { pack: Math.max(0, Math.round(exp.pack)), carrier: Math.max(0, Math.round(exp.carrier)), other: Math.max(0, Math.round(exp.other)) }; if (s.exp.carrier !== Math.round(s.agentUsd)) { s.agentUsd = s.exp.carrier; s.agentManual = true; } changed(); } }
-  const expSum = (s) => s.exp.pack + s.exp.carrier + s.exp.other;
+  function setExp(id, exp) { const s = ship(id); if (s) { s.exp = { pack: Math.max(0, Math.round(exp.pack)), carrier: Math.max(0, Math.round(exp.carrier)), other: Math.max(0, Math.round(exp.other)), dlv: s.exp.dlv || 0 }; if (s.exp.carrier !== Math.round(s.agentUsd)) { s.agentUsd = s.exp.carrier; s.agentManual = true; } changed(); } }
+  const expSum = (s) => s.exp.pack + s.exp.carrier + s.exp.other + (s.exp.dlv || 0);
 
   // ---------- версия 3.2: деньги по треку, просрочки, оплаты агентам, справочники ----------
   const OVER_C = 14, OVER_A = 30;
@@ -897,17 +1003,48 @@
   }
   // правка денег в карточке груза: каждая изменённая сумма пишется в историю действий
   const MONEYK = [["deliv", "доставка клиенту"], ["packUsd", "упаковка"], ["insUsd", "страховка"], ["value", "стоимость груза"], ["doorUsd", "расходы в Китае"], ["agentUsd", "сумма агенту"], ["expPack", "наши расходы на упаковку"], ["expOther", "прочие расходы"]];
+  // доставка клиенту считается тремя способами: по тарифу клиента, своей ставкой ($ за м³ или за кг) или суммой
+  const DMODE_T = { tariff: "по тарифу клиента", rate: "своя ставка", sum: "суммой" };
+  const delivCalc = (s, mode, rate, basis) => { const t = totals(s); return mode === "tariff" ? tariffCalc(client(s.clientId), t.weight, t.volume) : mode === "rate" ? Math.round((basis === "kg" ? t.weight : t.volume) * Math.max(0, +rate || 0)) : null; };
+  const delivText = (s) => (s.dmode === "rate" ? `своя ставка ${u.num(s.drate, s.drate % 1 ? 2 : 0)} $ ${BASIS_T[s.dbasis === "kg" ? "kg" : "m3"]}` : s.dmode === "sum" ? "сумма вписана вручную" : (client(s.clientId) ? "по тарифу: " + tariffLabel(client(s.clientId)) : "по тарифу клиента"));
+  // сумма агенту тоже тремя способами: по ставке агента из настроек, своей ставкой ($ за кг или за м³) или суммой
+  const AMODE_T = { agent: "по ставке агента", rate: "своя ставка", sum: "суммой" };
+  const agentByMode = (s, mode, rate, basis) => { const t = totals(s); return mode === "agent" ? agentCalc(s.route, t.weight, t.volume) : mode === "rate" ? Math.round((basis === "m3" ? t.volume : t.weight) * Math.max(0, +rate || 0)) : null; };
+  const agentModeText = (s) => (s.amode === "rate" ? `своя ставка ${u.num(s.arate, s.arate % 1 ? 2 : 0)} $ ${BASIS_T[s.abasis === "m3" ? "m3" : "kg"]}` : s.amode === "sum" || (!s.amode && s.agentManual) ? "сумма вписана вручную" : "по ставке агента");
+  // цена, по которой посчитана сумма агенту по треку: ставка агента с растаможкой, своя ставка груза или сумма вручную
+  function agentPrice(s) {
+    const n = (v) => u.num(v, v % 1 ? 2 : 0);
+    if (s.amode === "rate") return { t: `${n(s.arate)} $ ${BASIS_T[s.abasis === "m3" ? "m3" : "kg"]}`, mark: "своя" };
+    if (s.amode === "sum" || (!s.amode && s.agentManual)) return { t: "вручную", mark: "вручную" };
+    const a = agentOf(s.route); if (!a) return { t: "агент не найден", mark: "" };
+    return { t: `${n(a.rate)} $ ${BASIS_T[a.basis]}${a.customs ? " + " + u.num(a.customs, 2) + " $ за кг" : ""}`, mark: "" };
+  }
   function setMoney(id, d, by) {
     const s = ship(id); if (!s) return null;
     const ch = [], was = s.cost, cur = (k) => (k === "expPack" ? s.exp.pack : k === "expOther" ? s.exp.other : s[k] || 0);
+    // способ расчёта доставки: «было, стало» в историю, сумма доставки считается сама (кроме «суммой»)
+    if (d.dmode && DMODE_T[d.dmode]) {
+      const before = delivText(s), m0 = s.dmode || "tariff", r0 = s.drate || 0, b0 = s.dbasis || "m3";
+      const nm = d.dmode, nr = nm === "rate" ? Math.max(0, r2(+d.drate || 0)) : 0, nb = nm === "rate" ? (d.dbasis === "kg" ? "kg" : "m3") : "m3";
+      if (nm !== m0 || (nm === "rate" && (Math.abs(nr - r0) >= 0.005 || nb !== b0))) { s.dmode = nm; s.drate = nr; s.dbasis = nb; ch.push(`доставка: было ${before}, стало ${delivText(s)}`); }
+      const v = delivCalc(s, nm, nr, nb); if (v != null) d.deliv = v;
+    }
+    if (d.amode && AMODE_T[d.amode]) {
+      const before = agentModeText(s), m0 = s.amode || (s.agentManual ? "sum" : "agent"), r0 = s.arate || 0, b0 = s.abasis || "kg";
+      const nm = d.amode, nr = nm === "rate" ? Math.max(0, r2(+d.arate || 0)) : 0, nb = nm === "rate" ? (d.abasis === "m3" ? "m3" : "kg") : "kg";
+      if (nm !== m0 || (nm === "rate" && (Math.abs(nr - r0) >= 0.005 || nb !== b0))) { s.amode = nm; s.arate = nr; s.abasis = nb; ch.push(`сумма агенту: было ${before}, стало ${agentModeText(s)}`); }
+      const v = agentByMode(s, nm, nr, nb); if (v != null) d.agentUsd = v;
+    }
     MONEYK.forEach(([k, t]) => {
+      if (k === "deliv" && s.dmode && s.dmode !== "sum" && d.dmode == null) return; // доставка по тарифу или ставке не правится суммой
       if (d[k] == null || d[k] === "" || isNaN(+d[k])) return;
       const v = k === "value" ? Math.max(0, Math.round(+d[k])) : Math.max(0, r2(+d[k])), old = cur(k);
       if (Math.abs(v - old) < 0.005) return;
       ch.push(`${t} было ${u.usd(old)}, стало ${u.usd(v)}`);
-      if (k === "expPack") s.exp.pack = Math.round(v); else if (k === "expOther") s.exp.other = Math.round(v); else s[k] = v;
-      if (k === "agentUsd") { s.agentManual = true; s.exp.carrier = Math.round(v); }
+      if (k === "expPack") { s.exp.pack = Math.round(v); s.expPackManual = true; } else if (k === "expOther") s.exp.other = Math.round(v); else s[k] = v;
+      if (k === "agentUsd") { s.agentManual = (s.amode || "sum") !== "agent"; s.exp.carrier = Math.round(v); }
     });
+    if (d.amode === "agent") { s.agentManual = false; s.exp.carrier = Math.round(s.agentUsd); }
     if (!ch.length) return s;
     s.insManual = Math.round(s.insUsd) !== insCalc(s.value);
     recost(s);
@@ -931,7 +1068,7 @@
   // сверка с агентом за период: долг на начало, начислено за треки, оплачено, долг на конец
   function agentRecon(route, from, to) {
     const t0 = from || 0, t1 = to || Date.now(), a = agentOf(route);
-    const all = S.ships.filter((s) => s.route === route && s.agentUsd > 0).map((s) => { const t = totals(s); return { at: s.sentAt, t: `Трек ${s.id}, ${s.clientId}, ${u.kg(t.weight)}, ${u.vol(t.volume)}`, ch: s.agentUsd, pay: 0, id: s.id }; })
+    const all = S.ships.filter((s) => s.route === route && s.agentUsd > 0).map((s) => { const t = totals(s); return { at: s.sentAt, t: `Трек ${s.id}, ${s.clientId}, ${u.kg(t.weight)}, ${u.vol(t.volume)}`, price: agentPrice(s).t + (agentPrice(s).mark === "своя" ? ", своя" : ""), ch: s.agentUsd, pay: 0, id: s.id }; })
       .concat(S.apays.filter((p) => p.route === route).map((p) => ({ at: p.at, t: `Оплата: ${String(p.method).toLowerCase()}, ${tracksWord(p.shipIds.length)}${p.note ? ", " + p.note : ""}`, ch: 0, pay: p.amount }))).sort((x, y) => x.at - y.at);
     const open = r2(all.filter((o) => o.at < t0 - 12 * 3600e3).reduce((x, o) => x + o.ch - o.pay, 0));
     const ops = all.filter((o) => o.at >= t0 - 12 * 3600e3 && o.at <= t1 + 12 * 3600e3);
@@ -941,6 +1078,10 @@
   // ---------- справочники: изменения сразу влияют на расчёты новых отправок и пишутся в историю ----------
   const dirLog = (by, t) => logAdd("dir", by || "ramil", "Настройки: " + t, [], null);
   const agentText = (a) => `${u.num(a.rate, a.basis === "m3" ? 0 : 2)} $ ${BASIS_T[a.basis]}${a.customs ? ", растаможка " + u.num(a.customs, 2) + " $ за кг" : ""}${a.days ? ", " + a.days + " " + u.plural(a.days, "день", "дня", "дней") + " в пути" : ""}`;
+  // этапы пути агента одной строкой: «на границе через 4 дня, таможенное оформление через 14 дней»
+  const stagesText = (a) => (a.stages || []).map((x) => x.name.charAt(0).toLowerCase() + x.name.slice(1) + " через " + u.num(x.day, x.day % 1 ? 1 : 0) + " " + u.plural(Math.ceil(x.day), "день", "дня", "дней")).join(", ");
+  // настройка «Клиент видит маршрут»
+  function routeSave(v, by) { v = !!v; if (S.dir.clientRoute === v) return false; S.dir.clientRoute = v; dirLog(by, `клиент ${v ? "видит" : "не видит"} маршрут в своём кабинете`); changed(); emit("dir", "route"); return true; }
   function agentCheck(route, isNew) {
     const r = String(route || "").trim().toUpperCase();
     if (!r) return "Впишите маршрут, например 92G";
@@ -953,9 +1094,14 @@
     if (agentCheck(route, isNew)) return null;
     const a = isNew ? { route } : agentOf(route); if (!a) return null;
     Object.assign(a, { name: String(d.name || "").trim().slice(0, 40) || "Агент " + route, basis: d.basis === "m3" ? "m3" : "kg", rate: Math.max(0, r2(+d.rate || 0)), customs: Math.max(0, r2(+d.customs || 0)), days: Math.max(0, Math.round(+d.days || 0)), contact: String(d.contact || "").trim().slice(0, 40) });
+    // версия 3.3: этапы пути (название, через сколько дней после отправки), разброс даты прибытия ± дней, прирост шкалы в день
+    if (d.stages) a.stages = d.stages.map((x) => ({ name: String(x.name || "").trim().slice(0, 40), day: Math.max(0, r2(+x.day || 0)) })).filter((x) => x.name && x.day > 0).sort((x, y) => x.day - y.day).slice(0, 8);
+    if (d.spread != null) a.spread = Math.max(0, Math.min(30, Math.round(+d.spread || 0)));
+    if (d.grow != null) a.grow = Math.max(0, Math.min(10, r2(+d.grow || 0)));
+    if (!a.stages) a.stages = [];
     if (isNew) S.dir.agents.push(a);
     applyDir(S.dir);
-    dirLog(by, `${isNew ? "агент добавлен" : "агент изменён"}: ${a.route} ${a.name}, ${agentText(a)}`);
+    dirLog(by, `${isNew ? "агент добавлен" : "агент изменён"}: ${a.route} ${a.name}, ${agentText(a)}${a.stages.length ? ", этапы: " + stagesText(a) : ""}, дата ± ${a.spread || 0} дн., шкала +${u.num(a.grow || 0, (a.grow || 0) % 1 ? 1 : 0)}% в день`);
     changed(); emit("dir", "agents");
     return a;
   }
@@ -964,6 +1110,22 @@
     PACK.forEach((k) => { const v = Math.max(0, r2(+prices[k] || 0)); if (prices[k] != null && prices[k] !== "" && Math.abs(v - S.dir.pack[k]) >= 0.005) { ch.push(`${PACK_RU[k]} ${u.num(v, 2)} $ за место`); S.dir.pack[k] = v; } });
     if (ch.length) { dirLog(by, "цены упаковки для клиента: " + ch.join(", ")); changed(); emit("dir", "pack"); }
     return ch.length;
+  }
+  // «Склады в Китае»: наша цена упаковки в юанях, общая (whId "all") или своя у склада; расходы по грузам пересчитываются
+  function chwPriceSave(whId, prices, by) {
+    const all = !whId || whId === "all", ch = [];
+    if (!all) S.dir.whPack[whId] = S.dir.whPack[whId] || {};
+    PACK.forEach((k) => {
+      if (prices[k] == null || prices[k] === "" || isNaN(+prices[k])) return;
+      const v = Math.max(0, r2(+prices[k])), was = all ? S.dir.packCny[k] || 0 : packCnyOf(whId, k);
+      if (Math.abs(v - was) < 0.005) return;
+      if (all) S.dir.packCny[k] = v; else S.dir.whPack[whId][k] = v;
+      ch.push(`${PACK_RU[k]} ${u.num(v, v % 1 ? 2 : 0)} ¥ (было ${u.num(was, was % 1 ? 2 : 0)} ¥)`);
+    });
+    if (!ch.length) return 0;
+    S.ships.forEach((s) => { if (s.expPackManual) return; const c = cargo(s.id); if (c && (all || c.wh === whId)) s.exp.pack = packExpUsd(c); });
+    dirLog(by, `наша цена упаковки, ${all ? "все склады в Китае" : "склад " + wh(whId).ru}: ${ch.join(", ")}`);
+    changed(); emit("dir", "packCny"); return ch.length;
   }
   function insSave(pct, by) {
     const v = Math.max(0, Math.min(100, r2(+pct || 0))); if (Math.abs(v - S.dir.insPct) < 0.005) return false;
@@ -1006,6 +1168,35 @@
     x.manual = null; S.dir.rates.at = Date.now(); S.dir.rates.by = by || "ramil"; applyDir(S.dir);
     dirLog(by, `курс ${CUR[k].t.toLowerCase()}: возвращён курс ЦБ, ${u.num(rateOf(x), 2)} ${CUR[k].s} за 1 $`); changed(); emit("dir", "rates"); return true;
   }
+  // ---------- версия 3.3: новости и рассылки ----------
+  // новость: заголовок, текст, картинка по желанию, кому (все клиенты или выбранные), сейчас или отложенно.
+  // Публикация приходит каждому получателю уведомлением; у новости видно, сколько клиентов прочитали
+  const NEWS_K = { greet: "Поздравление", info: "Объявление", important: "Важно" };
+  const newsTo = (n) => (n.to === "sel" ? n.clients.filter((id) => client(id)) : S.clients.map((c) => c.id));
+  const newsFor = (cid) => S.news.filter((n) => n.status === "sent" && newsTo(n).includes(cid)).sort((a, b) => b.at - a.at);
+  const newsUnread = (cid) => newsFor(cid).filter((n) => !n.reads[cid]).length;
+  const newsReadN = (n) => newsTo(n).filter((id) => n.reads[id]).length;
+  const newsWho = (n) => (n.to === "sel" ? `выбранные клиенты (${newsTo(n).length}): ${newsTo(n).join(", ")}` : `все клиенты (${newsTo(n).length})`);
+  function newsPub(n, by) {
+    n.status = "sent"; n.at = Date.now(); n.pubBy = by || n.by;
+    newsTo(n).forEach((cid) => notify(cid, `${NEWS_K[n.kind] || "Новость"}: ${n.title}`, { t: "news", id: n.id }));
+    logAdd("news", by || n.by, `Новость опубликована: «${n.title}», ${newsWho(n)}`, [], null);
+  }
+  function newsAdd(d, by) {
+    const title = String(d.title || "").trim().slice(0, 80), text = String(d.text || "").trim().slice(0, 1200); if (!title || !text) return null;
+    const clients = (d.clients || []).filter((id) => client(id)); if (d.to === "sel" && !clients.length) return null;
+    const n = { id: S.seq.news++, kind: NEWS_K[d.kind] ? d.kind : "info", title, text, img: d.img && d.img.kind ? { p: +d.img.p || 0, kind: d.img.kind } : null, to: d.to === "sel" ? "sel" : "all", clients: d.to === "sel" ? clients : [], status: "sched", at: +d.at || Date.now(), by: by || "ramil", reads: {} };
+    S.news.push(n);
+    if (d.when === "later" && n.at > Date.now() + 60e3) logAdd("news", n.by, `Новость запланирована на ${u.dLong(n.at)} ${u.hm(n.at)}: «${n.title}», ${newsWho(n)}`, [], null);
+    else newsPub(n, by);
+    changed(); emit("news", n);
+    return n;
+  }
+  function newsPublish(id, by) { const n = S.news.find((x) => x.id === +id); if (!n || n.status !== "sched") return null; newsPub(n, by); changed(); emit("news", n); return n; }
+  // отложенные новости публикуются сами, когда подошло время
+  function newsTick() { let ch = false; S.news.forEach((n) => { if (n.status === "sched" && n.at <= Date.now()) { newsPub(n, n.by); ch = true; } }); if (ch) changed(); return ch; }
+  function newsRead(id, cid) { const n = S.news.find((x) => x.id === +id); if (!n || n.reads[cid]) return; n.reads[cid] = Date.now(); changed(); }
+
   function setTariff(clientId, t) { const c = client(clientId); if (c) { c.tariff = t.type === "density" ? { type: "density" } : { type: t.type, rate: t.rate }; changed(); } }
 
   load();
@@ -1017,5 +1208,6 @@
     wopAdd, wopBalance, wopList, wopTotals, wopText, clientCodeCheck, saveClient, pay, setExp, expSum, setTariff,
     MONEY_SECS, BASIS_T, RATE_K, OVER_C, OVER_A, agentOf, agentCalc, packCost, insCalc, etaDays, recost, ageDays, overC, overA, agentDebt, agentIsPaid, agentStats, MONEYK, setMoney, agentPay, agentRecon,
     agentText, agentCheck, agentSave, packSave, insSave, whSave, tkSave, ratesSave, rateCb, rateOf, rateSrc, r2,
+    agentPrice, AMODE_T, agentByMode, agentModeText, dlvLabel, dlvText, setDlv, issueText, packCnyOf, packExpCny, packExpUsd, chwPriceSave, trip, rangeText, clientRoute, cText, stagesText, routeSave, SENT_T, TRIP_CEIL, DMODE_T, delivCalc, delivText, NEWS_K, newsTo, newsFor, newsUnread, newsReadN, newsWho, newsAdd, newsPublish, newsTick, newsRead,
   };
 })(window.App);

@@ -4,31 +4,74 @@
   const u = App.u, st = App.store, I = u.icon, E = u.esc, $ = (id) => document.getElementById(id);
   const K = App.DK, cname = K.cname, xBtn = K.xBtn, today = K.today, csvDl = K.csvDl, actor = K.actor;
 
-  // ---------- отчёты ----------
-  function weeksData() {
-    const now = Date.now();
-    return [...Array(8)].map((_, i) => 7 - i).map((w) => {
-      const from = now - (w + 1) * 7 * u.DAY, to = now - w * 7 * u.DAY;
-      return { v: st.S.cargos.filter((c) => c.at > from && c.at <= to).reduce((a, c) => a + c.volume, 0), label: u.dShort(from + u.DAY) };
-    });
+  // ---------- отчёты (версия 3.3): период «Сегодня / Месяц / Период», объём и вес везде, график с переключателем «м³ / кг», таблица по маршрутам ----------
+  const rf = () => App.tmp.rf || (App.tmp.rf = { per: "month", from: "", to: "", unit: "m3", cunit: "m3" });
+  // границы периода: сегодня с полуночи, месяц (30 дней) или свои даты «с» и «по» включительно
+  function perRange(f) {
+    const now = Date.now(), d0 = new Date(now); d0.setHours(0, 0, 0, 0);
+    if (f.per === "all") return { from: 0, to: now + u.DAY, label: "за всё время", short: "за всё время" };
+    if (f.per === "today") return { from: d0.getTime(), to: now, label: "за сегодня", short: "сегодня" };
+    if (f.per === "range") {
+      const a = K.fromISO(f.from), b = K.fromISO(f.to), from = a ? a - 12 * 3600e3 : now - 30 * u.DAY, to = b ? b + 12 * 3600e3 - 1 : now;
+      return { from, to: Math.max(from + 1, to), label: `с ${u.dShort(from + 12 * 3600e3)} по ${u.dShort(Math.min(to, now))}`, short: "за период" };
+    }
+    return { from: now - 30 * u.DAY, to: now, label: "за месяц", short: "за месяц" };
   }
+  const repRange = () => perRange(rf());
+  // общий фильтр периода для денежных разделов: кнопки и даты «с» и «по» (как в «Финансах» склада в Москве)
+  const perBar = (f, act, inp, opts, hl) => `<div class="seg light sm"${hl ? ` data-hl="${hl}"` : ""}>${opts.map(([k, t]) => `<button type="button" class="${String(f.per) === String(k) ? "on" : ""}" data-act="${act}" data-k="${k}" data-per="${act}:${k}">${t}</button>`).join("")}</div>
+    ${f.per === "range" ? `<label class="dt"><span>с</span><input class="inp sm" type="date" data-in="${inp}" data-k="from" value="${u.esc(f.from || "")}" aria-label="Период с"></label><label class="dt"><span>по</span><input class="inp sm" type="date" data-in="${inp}" data-k="to" value="${u.esc(f.to || "")}" aria-label="Период по"></label>` : ""}`;
+  const rangeInit = (f) => { if (!f.from) { f.from = K.dISO(Date.now() - 60 * u.DAY); f.to = K.dISO(Date.now()); } };
+  const inR = (t, r) => t >= r.from && t <= r.to;
+  // столбики: сегодня по 3 часа, до 31 дня по дням, дольше по неделям
+  function buckets(r) {
+    const f = rf(), out = [], span = (r.to - r.from) / u.DAY;
+    if (f.per === "today") { for (let h = 0; h < 24; h += 3) { const a = r.from + h * 3600e3; out.push({ from: a, to: a + 3 * 3600e3 - 1, label: u.pad(h) + ":00", cur: Date.now() >= a && Date.now() < a + 3 * 3600e3 }); } }
+    else if (span <= 31.5) { const d0 = new Date(r.from); d0.setHours(0, 0, 0, 0); for (let a = d0.getTime(); a <= r.to; a += u.DAY) out.push({ from: a, to: a + u.DAY - 1, label: u.dShort(a), cur: u.dayDiff(a) === 0 }); }
+    else { for (let a = r.from; a <= r.to; a += 7 * u.DAY) out.push({ from: a, to: a + 7 * u.DAY - 1, label: u.dShort(a), cur: Date.now() >= a && Date.now() < a + 7 * u.DAY }); }
+    return { list: out, kind: f.per === "today" ? "по 3 часа" : span <= 31.5 ? "по дням" : "по неделям" };
+  }
+  function repData() {
+    const r = repRange(), cs = st.S.cargos.filter((c) => inR(c.at, r)), b = buckets(r);
+    const bars = b.list.map((x) => { const l = cs.filter((c) => c.at >= x.from && c.at <= x.to); return Object.assign(x, { v: l.reduce((a, c) => a + c.volume, 0), w: l.reduce((a, c) => a + c.weight, 0), n: l.length }); });
+    return { r, cs, bars, kind: b.kind, vol: cs.reduce((a, c) => a + c.volume, 0), w: cs.reduce((a, c) => a + c.weight, 0) };
+  }
+  // кратко для подписи на столбике
+  const shortN = (v, unit) => (unit === "kg" ? (v >= 1000 ? u.num(v / 1000, 1) + "т" : String(Math.round(v))) : u.num(v, 1));
   function reports() {
-    const S = st.S, weeks = weeksData(), max = Math.max(...weeks.map((x) => x.v), 1);
-    const byClient = S.clients.map((c) => ({ c, v: S.cargos.filter((x) => x.clientId === c.id).reduce((a, x) => a + x.volume, 0) })).sort((a, b) => b.v - a.v), vmax = byClient[0].v || 1;
-    const stay = S.ships.map((s) => { const c = st.cargo(s.items[0].cargoId); return c ? (s.sentAt - c.at) / u.DAY : 0; }).filter((x) => x > 0.01);
+    const S = st.S, f = rf(), D = repData(), unit = f.unit === "kg" ? "kg" : "m3", cu = f.cunit === "kg" ? "kg" : "m3", r = D.r;
+    const val = (x) => (unit === "kg" ? x.w : x.v), max = Math.max(...D.bars.map(val), unit === "kg" ? 1 : 0.1), many = D.bars.length > 12;
+    const byClient = S.clients.map((c) => { const l = D.cs.filter((x) => x.clientId === c.id); return { c, v: l.reduce((a, x) => a + x.volume, 0), w: l.reduce((a, x) => a + x.weight, 0) }; }).filter((x) => x.v || x.w).sort((a, b) => (cu === "kg" ? b.w - a.w : b.v - a.v));
+    const cmax = Math.max(1e-9, ...byClient.map((x) => (cu === "kg" ? x.w : x.v)));
+    const sent = S.ships.filter((s) => inR(s.sentAt, r)), stay = sent.map((s) => { const c = st.cargo(s.items[0].cargoId); return c ? (s.sentAt - c.at) / u.DAY : 0; }).filter((x) => x > 0.01);
     const avg = stay.length ? stay.reduce((a, x) => a + x, 0) / stay.length : 0;
-    const byWh = st.WH.map((w) => ({ w, n: st.waiting(w.id).length + st.openTasks(w.id).length + st.ready(w.id).length }));
+    const recs = S.receipts.filter((x) => inR(x.at, r)), byWh = st.WH.map((w) => ({ w, n: recs.filter((x) => x.wh === w.id).length }));
+    // по маршрутам: упакованные за период, отправленные по маршруту или ещё не отправленные
+    const seeR = K.seeRoute(), rows = {};
+    D.cs.forEach((c) => { const s = st.ship(c.id), k = s ? (seeR ? s.route : K.TR(s.transport).t) : "_wait"; const x = rows[k] || (rows[k] = { n: 0, v: 0, w: 0 }); x.n++; x.v += c.volume; x.w += c.weight; });
+    const keys = Object.keys(rows).sort((a, b) => (a === "_wait") - (b === "_wait") || rows[b].v - rows[a].v);
+    const segU = (act, cur) => `<div class="seg light sm">${[["m3", "м³"], ["kg", "кг"]].map(([k, t]) => `<button type="button" class="${cur === k ? "on" : ""}" data-act="${act}" data-k="${k}" data-ru="${act}:${k}">${t}</button>`).join("")}</div>`;
     return `<div class="pane">
       <div class="ph"><h1>Отчёты</h1><span class="grow"></span><button class="btn" type="button" data-act="exportRep">${I("download")}Выгрузить в Excel</button></div>
-      <div class="kpis">
-        <div class="kpi hero"><span>Упаковано за 8 недель</span><strong>${u.vol(weeks.reduce((a, x) => a + x.v, 0))}</strong><small>${S.cargos.length} ${u.plural(S.cargos.length, "груз", "груза", "грузов")} из ${S.receipts.length} приходов</small></div>
-        <div class="kpi"><span>От упаковки до отправки</span><strong>${u.num(avg, 1)} дн.</strong><small>в среднем по отправкам</small></div>
-        <div class="kpi"><span>Отправок в пути</span><strong>${S.ships.filter((s) => s.status === "way").length}</strong><small>авто, ЖД и авиа</small></div>
-        <div class="kpi"><span>Сейчас на складах</span><strong>${byWh.reduce((a, x) => a + x.n, 0)}</strong><small>${byWh.map((x) => x.w.ru + " " + x.n).join(" · ")}</small></div>
+      <div class="fbar rep-f" data-hl="rep-per"><div class="seg light sm">${[["today", "Сегодня"], ["month", "Месяц"], ["range", "Период"]].map(([k, t]) => `<button type="button" class="${f.per === k ? "on" : ""}" data-act="rfPer" data-k="${k}" data-rp="${k}">${t}</button>`).join("")}</div>
+        ${f.per === "range" ? `<label class="dt"><span>с</span><input class="inp sm" type="date" data-in="rfDate" data-k="from" value="${E(f.from)}" aria-label="Отчёт с"></label><label class="dt"><span>по</span><input class="inp sm" type="date" data-in="rfDate" data-k="to" value="${E(f.to)}" aria-label="Отчёт по"></label>` : ""}
+        <span class="grow"></span><span class="muted s13" id="repLbl">${E(r.label)}: ${D.cs.length} ${u.plural(D.cs.length, "груз", "груза", "грузов")}</span></div>
+      <div class="kpis rep-kp">
+        <div class="kpi hero" data-hl="rep-packed"><span>Упаковано ${E(r.label)}</span><strong>${u.vol(D.vol)}</strong><b class="kpi-2">${u.kg(D.w)}</b><small>${D.cs.length} ${u.plural(D.cs.length, "груз", "груза", "грузов")}</small></div>
+        <div class="kpi"><span>От упаковки до отправки</span><strong>${u.num(avg, 1)} дн.</strong><small>в среднем по ${sent.length} ${u.plural(sent.length, "отправке", "отправкам", "отправкам")} ${E(r.short)}</small></div>
+        <div class="kpi"><span>Отправлено ${E(r.label)}</span><strong>${sent.length}</strong><small>${u.vol(sent.reduce((a, s) => a + st.totals(s).volume, 0))} · ${u.kg(sent.reduce((a, s) => a + st.totals(s).weight, 0))}</small></div>
+        <div class="kpi"><span>Принято на складах</span><strong>${recs.length}</strong><small class="ell1">${byWh.map((x) => x.w.ru + " " + x.n).join(" · ")}</small></div>
       </div>
-      <div class="grid2">
-        <div class="box"><h3>${I("chart")}Объём упакованных грузов по неделям, м³</h3><div class="bars">${weeks.map((x, i) => `<div class="bcol"><div class="b${i === 7 ? " cur" : ""}" style="height:${Math.max(4, (x.v / max) * 100)}%"><span>${u.num(x.v, 1)}</span></div><small>${x.label}</small></div>`).join("")}</div></div>
-        <div class="box"><h3>${I("users")}Клиенты по объёму</h3>${byClient.map((x) => `<div class="hbar"><span class="ell1">${E(x.c.name)}</span><i><b style="width:${(x.v / vmax) * 100}%"></b></i><span class="muted">${u.vol(x.v)}</span></div>`).join("")}</div>
+      <div class="grid2 rep-g">
+        <div class="rep-l">
+          <div class="box" data-hl="rep-chart"><div class="row rep-h"><h3 class="grow">${I("chart")}${unit === "kg" ? "Вес упакованных грузов, кг" : "Объём упакованных грузов, м³"}<small class="muted"> ${E(D.kind)}</small></h3>${segU("rfUnit", unit)}</div>
+            <div class="bars${many ? " many" : ""}" data-bars="${D.bars.length}">${D.bars.map((x, i) => `<div class="bcol" title="${E(x.label)}: ${E(u.vol(x.v))}, ${E(u.kg(x.w))}"><div class="b${x.cur ? " cur" : ""}${val(x) ? "" : " z"}" style="height:${val(x) ? Math.max(3, (val(x) / max) * 100) : 0}%">${many ? "" : `<span>${shortN(val(x), unit)}</span>`}</div><small>${many && i % Math.ceil(D.bars.length / 6) ? "" : E(x.label)}</small></div>`).join("")}</div></div>
+          <div class="box mt" data-hl="rep-routes"><h3>${I("route")}${seeR ? "По маршрутам" : "По видам доставки"}</h3><div class="tbx flat"><table class="tbl bare"><thead><tr><th>${seeR ? "Маршрут" : "Доставка"}</th><th class="r">Грузов</th><th class="r">м³</th><th class="r">кг</th></tr></thead><tbody>
+            ${keys.map((k) => `<tr data-rr="${E(k)}"><td><b>${k === "_wait" ? "ещё не отправлены" : E(k)}</b>${seeR && k !== "_wait" && st.agentOf(k) ? `<span class="muted s12"> ${E(st.agentOf(k).name)}</span>` : ""}</td><td class="r">${rows[k].n}</td><td class="r">${u.num(rows[k].v, 2)}</td><td class="r">${u.groups(Math.round(rows[k].w))}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">За этот период грузов нет</td></tr>'}
+            ${keys.length ? `<tr class="tot"><td>Итого</td><td class="r">${D.cs.length}</td><td class="r">${u.num(D.vol, 2)}</td><td class="r">${u.groups(Math.round(D.w))}</td></tr>` : ""}</tbody></table></div></div>
+        </div>
+        <div class="box" data-hl="rep-clients"><div class="row rep-h"><h3 class="grow">${I("users")}${cu === "kg" ? "Клиенты по весу" : "Клиенты по объёму"}</h3>${segU("rfCUnit", cu)}</div>
+          ${byClient.map((x) => `<div class="hbar" data-rc="${E(x.c.id)}"><span class="ell1">${E(x.c.name)}</span><i><b style="width:${((cu === "kg" ? x.w : x.v) / cmax) * 100}%"></b></i><span class="muted nw">${cu === "kg" ? u.kg(x.w) : u.vol(x.v)}</span></div>`).join("") || '<p class="muted p0">За этот период грузов нет</p>'}</div>
       </div>
     </div>`;
   }
@@ -114,23 +157,29 @@
   }
 
   // ---------- расходы и прибыль ----------
+  // период «Расходов и прибыли»: 30 или 90 дней или свои даты «с» и «по»
+  function profitList() {
+    const per = App.tmp.period, f = App.tmp.prf || (App.tmp.prf = { from: "", to: "" });
+    const r = per === "range" ? perRange({ per: "range", from: f.from, to: f.to }) : { from: Date.now() - (+per || 90) * u.DAY, to: Date.now() + u.DAY, label: "за " + (+per || 90) + " дней" };
+    return { r, list: st.S.ships.filter((s) => s.sentAt >= r.from && s.sentAt <= r.to).sort((a, b) => b.sentAt - a.sentAt) };
+  }
   function profit() {
-    const now = Date.now(), per = App.tmp.period;
-    const list = st.S.ships.filter((s) => now - s.sentAt < per * u.DAY).sort((a, b) => b.sentAt - a.sentAt);
+    const pl = profitList(), list = pl.list, per = App.tmp.period;
     const T = list.reduce((a, s) => ({ rev: a.rev + s.cost, exp: a.exp + st.expSum(s) }), { rev: 0, exp: 0 }), pr = T.rev - T.exp;
     const byC = {}; list.forEach((s) => { byC[s.clientId] = (byC[s.clientId] || 0) + s.cost - st.expSum(s); });
     const top = Object.keys(byC).map((k) => ({ k, v: byC[k] })).sort((a, b) => b.v - a.v), tmax = Math.max(1, ...top.map((x) => x.v));
     const r = K.seeRoute();
     return `<div class="pane">
-      <div class="ph"><div><h1>Расходы и прибыль</h1><div class="sub">По каждой отправке: сколько взяли с клиента, сколько потратили на упаковку и перевозчика, что осталось. Нажмите на трек: откроется карточка груза, суммы правятся там.</div></div><span class="grow"></span><div class="seg light sm">${[[30, "30 дней"], [90, "90 дней"]].map(([k, t]) => `<button type="button" class="${per === k ? "on" : ""}" data-act="period" data-k="${k}">${t}</button>`).join("")}</div></div>
+      <div class="ph"><div><h1>Расходы и прибыль</h1><div class="sub">По каждой отправке: сколько взяли с клиента, сколько потратили на упаковку и перевозчика, что осталось. Нажмите на трек: откроется карточка груза, суммы правятся там.</div></div><span class="grow"></span><button class="btn" type="button" data-act="exportProfit">${I("download")}Выгрузить в Excel</button></div>
+      <div class="fbar pf-per" data-hl="profit-per">${perBar({ per, from: (App.tmp.prf || {}).from, to: (App.tmp.prf || {}).to }, "period", "prfDate", [[30, "30 дней"], [90, "90 дней"], ["range", "Период"]])}<span class="grow"></span><span class="muted s13" id="profitLbl">${E(pl.r.label)}: ${list.length} ${u.plural(list.length, "отправка", "отправки", "отправок")}</span></div>
       <div class="kpis">
         <div class="kpi"><span>Выручка</span><strong>${u.usd(T.rev)}</strong><small>${list.length} ${u.plural(list.length, "отправка", "отправки", "отправок")}</small></div>
         <div class="kpi"><span>Себестоимость</span><strong>${u.usd(T.exp)}</strong><small>упаковка, перевозчик, прочее</small></div>
-        <div class="kpi hero"><span>Прибыль</span><strong>${u.usd(pr)}</strong><small>за ${per} дней</small></div>
+        <div class="kpi hero"><span>Прибыль</span><strong>${u.usd(pr)}</strong><small>${E(pl.r.label)}</small></div>
         <div class="kpi"><span>Маржа</span><strong>${T.rev ? Math.round((pr / T.rev) * 100) : 0}%</strong><small>прибыль к выручке</small></div>
       </div>
       <div class="tbx"><table class="tbl" data-hl="profit-t"><thead><tr><th>Отправка</th>${r ? "<th>Маршрут</th>" : ""}<th class="r">Стоимость груза</th><th class="r">Страховка</th><th class="r">Выручка</th><th class="r">Упаковка</th><th class="r">Перевозчик</th><th class="r">Прочее</th><th class="r">Прибыль</th><th></th></tr></thead><tbody>
-          ${list.map((s) => { const p = s.cost - st.expSum(s); return `<tr class="click" data-act="openItem" data-t="ship" data-id="${E(s.id)}" data-exp="${E(s.id)}"><td><b class="mono">${E(s.id)}</b><div class="muted s12">${E(s.clientId)} · ${u.dShort(s.sentAt)}</div></td>${r ? `<td><b>${E(s.route)}</b><div class="muted s12">${E(K.TR(s.transport).t)}</div></td>` : ""}<td class="r">${s.value ? u.usd(s.value) : '<span class="muted">не указана</span>'}</td><td class="r">${s.insUsd ? u.usd(s.insUsd) : '<span class="muted">нет</span>'}</td><td class="r"><b>${u.usd(s.cost)}</b></td><td class="r muted">${u.usd(s.exp.pack)}</td><td class="r muted">${u.usd(s.exp.carrier)}</td><td class="r muted">${u.usd(s.exp.other)}</td><td class="r ${p >= 0 ? "ok" : "bad"}"><b>${u.usd(p)}</b></td><td class="r muted">${I("chevron")}</td></tr>`; }).join("") || `<tr><td colspan="${r ? 10 : 9}" class="muted">За период отправок нет</td></tr>`}
+          ${list.map((s) => { const p = s.cost - st.expSum(s); return `<tr class="click" data-act="openItem" data-t="ship" data-id="${E(s.id)}" data-exp="${E(s.id)}"><td><b class="mono">${E(s.id)}</b><div class="muted s12">${E(s.clientId)} · ${u.dShort(s.sentAt)}</div></td>${r ? `<td><b>${E(s.route)}</b><div class="muted s12">${E(K.TR(s.transport).t)}</div></td>` : ""}<td class="r">${s.value ? u.usd(s.value) : '<span class="muted">не указана</span>'}</td><td class="r">${s.insUsd ? u.usd(s.insUsd) : '<span class="muted">нет</span>'}</td><td class="r"><b>${u.usd(s.cost)}</b></td><td class="r muted">${u.usd(s.exp.pack)}</td><td class="r muted">${u.usd(s.exp.carrier)}</td><td class="r muted">${u.usd(s.exp.other + (s.exp.dlv || 0))}${s.exp.dlv ? `<div class="s12" data-pdlv="${E(s.id)}">доставка ${u.usd(s.exp.dlv)}</div>` : ""}</td><td class="r ${p >= 0 ? "ok" : "bad"}"><b>${u.usd(p)}</b></td><td class="r muted">${I("chevron")}</td></tr>`; }).join("") || `<tr><td colspan="${r ? 10 : 9}" class="muted">За период отправок нет</td></tr>`}
         </tbody></table></div>
       <div class="grid2 mt2">
         <div class="box"><h3>${I("users")}Прибыль по клиентам</h3>${top.map((x) => `<div class="hbar"><span class="ell1">${E(cname(x.k))}</span><i><b style="width:${Math.max(0, (x.v / tmax) * 100)}%"></b></i><span class="muted">${u.usd(x.v)}</span></div>`).join("") || '<p class="muted p0">Нет данных</p>'}</div>
@@ -221,7 +270,9 @@
 
   // ---------- действия ----------
   Object.assign(App.acts, {
-    period: (d) => { App.tmp.period = +d.k; App.refresh(true); },
+    period: (d) => { App.tmp.period = d.k === "range" ? "range" : +d.k; if (d.k === "range") rangeInit(App.tmp.prf || (App.tmp.prf = { from: "", to: "" })); App.refresh(true); },
+    exportProfit: () => { const pl = profitList(); csvDl("raskhody_pribyl_" + today() + ".csv", [["Расходы и прибыль", pl.r.label], [], ["Отправка", "Клиент", "Отправлена"].concat(K.seeRoute() ? ["Маршрут"] : []).concat(["Выручка, $", "Упаковка, $", "Перевозчик, $", "Прочее, $", "Прибыль, $"])]
+      .concat(pl.list.map((s) => [s.id, s.clientId, u.dFull(s.sentAt)].concat(K.seeRoute() ? [s.route] : []).concat([Math.round(s.cost), s.exp.pack, s.exp.carrier, s.exp.other + (s.exp.dlv || 0), Math.round(s.cost - st.expSum(s))])))); },
     payModal: (d) => { App.tmp.pay = null; payModal(d.c); },
     pview: (d) => { App.tmp.pview = d.k; App.tmp.psel2 = []; App.refresh(true); },
     payCur: (d) => { const p = App.tmp.pay; p.cur = d.k; p.rate = String(st.CUR[d.k].rate).replace(".", ","); payAuto(p); payModal(p.c); },
@@ -258,7 +309,10 @@
       if (w && App.scenario) App.scenario.check("wop", w);
     },
     exportWops: () => csvDl("sklad_moskva_" + today() + ".csv", [["Дата", "Время", "Операция", "Подробности", "Кто внёс", "Сумма", "Валюта"]].concat(st.wopList(wf(App.tmp.wf)).map((w) => { const x = st.wopText(w); return [u.dFull(w.at), u.hm(w.at), x.t, x.s, st.who(w.by), w.amount, w.cur]; }))),
-    exportRep: () => csvDl("otchet_" + today() + ".csv", [["Неделя с", "Упаковано, м³"]].concat(weeksData().map((w) => [w.label, u.num(w.v, 2)]))),
+    exportRep: () => { const D = repData(); csvDl("otchet_" + today() + ".csv", [["Отчёт", D.r.label], [], [D.kind === "по 3 часа" ? "Время" : D.kind === "по дням" ? "День" : "Неделя с", "Упаковано, м³", "Упаковано, кг", "Грузов"]].concat(D.bars.map((w) => [w.label, u.num(w.v, 2), Math.round(w.w), w.n]), [["Итого", u.num(D.vol, 2), Math.round(D.w), D.cs.length]])); },
+    rfPer: (d) => { const f = rf(); f.per = d.k; if (d.k === "range" && !f.from) { f.from = K.dISO(Date.now() - 60 * u.DAY); f.to = K.dISO(Date.now()); } App.refresh(true); },
+    rfUnit: (d) => { rf().unit = d.k; App.refresh(true); },
+    rfCUnit: (d) => { rf().cunit = d.k; App.refresh(true); },
     exportMoney: () => (App.tmp.pview !== "clients" && App.D.payTracksCsv ? App.D.payTracksCsv() : csvDl("oplaty_" + today() + ".csv", [["Код", "Клиент", "Начислено, $", "Оплачено, $", "Долг, $"]].concat(st.S.clients.filter((c) => K.mine(c.id)).map((c) => { const m = st.money(c.id); return [c.id, c.name, Math.round(m.charged), Math.round(m.paid), Math.round(m.debt)]; })))),
   });
 
@@ -268,8 +322,11 @@
     expIn: (v, el) => { App.tmp.exp[el.dataset.k] = v; $("expSum").innerHTML = expHtml(); },
     tarRate: (v) => { App.tmp.tar.rate = v; $("tarEx").innerHTML = tarHtml(); },
     wfDate: (v, el) => { App.tmp.wf[el.dataset.k] = v; App.refresh(true); },
+    rfDate: (v, el) => { rf()[el.dataset.k] = v; App.refresh(true); },
+    prfDate: (v, el) => { (App.tmp.prf || (App.tmp.prf = { from: "", to: "" }))[el.dataset.k] = v; App.refresh(true); },
     wopIn: (v, el) => { const x = App.tmp.wop; if (!x) return; x[el.dataset.k] = v; const o = (x.slot == null ? document : App.slotEl(x.slot)).querySelector("#wopSum"); if (o) o.innerHTML = wopSumHtml(x); },
   });
+  Object.assign(App.D, { perRange, perBar, rangeInit });
   Object.assign(App.D.screens, { reports, money, profit, tariffs, mskfin });
   Object.assign(App.D.modals, { pay: () => { if (App.tmp.pay) payModal(App.tmp.pay.c); }, wop: () => wopDraw() });
   Object.assign(App.D, { payModal, reconModal, invoiceModal, expModal, tariffModal, wopOpen, sgn });

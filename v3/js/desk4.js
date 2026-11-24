@@ -16,18 +16,21 @@
   const canMoney = () => !K.asId() || (can("cost") && K.sec("money"));
 
   // ---------- «Оплаты клиентов» по трекам ----------
-  const pfDef = () => ({ q: "", c: "all", st: "all", over: false });
+  const pfDef = () => ({ q: "", c: "all", st: "all", over: false, per: "all", from: "", to: "" });
+  // период по дате отправки: всё время, месяц или свои даты (общий фильтр денежных разделов)
+  const PER_O = [["all", "Всё время"], ["month", "Месяц"], ["range", "Период"]];
+  const inPer = (f, t) => { if (!f.per || f.per === "all") return true; const r = App.D.perRange(f); return t >= r.from && t <= r.to; };
   const pf = () => App.tmp.pf || (App.tmp.pf = pfDef());
   function payList() {
     const f = pf(), q = f.q.trim().toUpperCase();
-    return st.S.ships.filter((s) => vis(s) && (f.c === "all" || s.clientId === f.c) && (f.st === "all" || (f.st === "debt" ? st.debtOf(s) > 0.5 : st.isPaid(s))) && (!f.over || st.overC(s))
+    return st.S.ships.filter((s) => vis(s) && inPer(f, s.sentAt) && (f.c === "all" || s.clientId === f.c) && (f.st === "all" || (f.st === "debt" ? st.debtOf(s) > 0.5 : st.isPaid(s))) && (!f.over || st.overC(s))
       && (!q || [s.id, s.clientId, cname(s.clientId), cg(s).name].concat(recTracks(s)).some((x) => String(x || "").toUpperCase().includes(q)))).sort((a, b) => b.sentAt - a.sentAt);
   }
   // отмеченные треки: только с долгом и только одного клиента
   function ptSel() { const x = (App.tmp.psel2 || []).filter((id) => { const s = st.ship(id); return s && st.debtOf(s) > 0.5 && vis(s); }), c = x.length ? st.ship(x[0]).clientId : null; App.tmp.psel2 = x.filter((id) => st.ship(id).clientId === c); return App.tmp.psel2; }
   const overPill = (s) => `<span class="st" data-st="unk" data-ov="c">долг ${daysW(st.ageDays(s))}</span>`;
   function payTracks() {
-    const f = pf(), list = payList(), sel = ptSel(), r = K.seeRoute(), dirty = f.q || f.c !== "all" || f.st !== "all" || f.over;
+    const f = pf(), list = payList(), sel = ptSel(), r = K.seeRoute(), dirty = f.q || f.c !== "all" || f.st !== "all" || f.over || (f.per && f.per !== "all");
     const chosen = sel.map(st.ship), sum = chosen.reduce((a, s) => a + st.debtOf(s), 0);
     const rows = list.map((s) => {
       const t = st.totals(s), c = st.client(s.clientId), d = st.debtOf(s), on = sel.includes(s.id), o = st.overC(s);
@@ -38,7 +41,8 @@
         <td class="r">${u.usd(s.cost)}</td><td class="r">${u.usd(Math.min(s.cost, s.paidUsd))}</td><td class="r ${d > 0.5 ? "bad" : "ok"}">${d > 0.5 ? u.usd(d) : "нет"}${o ? `<div>${overPill(s)}</div>` : ""}</td><td class="r muted">${I("chevron")}</td></tr>`;
     }).join("");
     const opts = st.S.clients.filter((c) => K.mine(c.id)).map((c) => `<option value="${E(c.id)}"${f.c === c.id ? " selected" : ""}>${E(c.id)} ${E(c.name)}</option>`).join("");
-    return `<div class="fbar pay-f" data-hl="pay-f"><label class="search">${I("search")}<input data-in="pfQ" value="${E(f.q)}" placeholder="Трек, китайский трек, клиент, наименование" data-hl="pay-q"></label>
+    return `<div class="fbar pay-per" data-hl="pay-per">${App.D.perBar(f, "pfPer", "pfDate", PER_O)}<span class="grow"></span><span class="muted s13">по дате отправки</span></div>
+      <div class="fbar pay-f" data-hl="pay-f"><label class="search">${I("search")}<input data-in="pfQ" value="${E(f.q)}" placeholder="Трек, китайский трек, клиент, наименование" data-hl="pay-q"></label>
         <select class="inp sm" data-chg="pfC" aria-label="Клиент"><option value="all">Все клиенты</option>${opts}</select>
         <select class="inp sm" data-chg="pfSt" aria-label="Оплата"><option value="all">Все треки</option><option value="debt"${f.st === "debt" ? " selected" : ""}>С долгом</option><option value="paid"${f.st === "paid" ? " selected" : ""}>Оплачены</option></select>
         <button class="chipb${f.over ? " bad" : ""}" type="button" data-act="pOver" id="chipOver" aria-pressed="${f.over ? "true" : "false"}">${I("clock")}Долг дольше ${st.OVER_C} дней</button>
@@ -52,43 +56,71 @@
     .concat(payList().map((s) => { const t = st.totals(s), c = st.client(s.clientId); return [s.id, s.clientId, cname(s.clientId), K.TR(s.transport).t].concat(K.seeRoute() ? [s.route] : []).concat([Math.round(t.weight), u.num(t.volume, 2), cg(s).name || "", c ? st.tariffLabel(c) : "", s.cost, Math.min(s.cost, s.paidUsd), st.debtOf(s), st.ageDays(s)]); })));
 
   // ---------- блок «Деньги» в карточке груза: из чего складывается стоимость, страховка, сумма агенту, прибыль ----------
+  // версия 3.3: суммы правятся только в «Расходах и прибыли». В «Отправках» блок только для просмотра, без агента и прибыли.
+  // В остальных местах вместо кнопки ссылка «Изменить в «Расходах и прибыли»». Агент и прибыль видны только в разделах «Денег»
+  const MONEY_SCR = ["money", "profit", "agents"];
   function moneyBox(o) {
-    const c = st.client(o.clientId), x = cg(o), a = st.agentOf(o.route), pct = st.S.dir.insPct, edit = canMoney();
+    const c = st.client(o.clientId), x = cg(o), a = st.agentOf(o.route), pct = st.S.dir.insPct, from = App.ui.desk;
+    const edit = from === "profit" && canMoney(), link = !edit && from !== "cons" && canMoney() && K.allowed("profit"), inMoney = MONEY_SCR.includes(from);
     const line = (t, sub, v, k) => `<div class="pline mini"${k ? ` data-ml="${k}"` : ""}><span>${t}${sub ? `<small>${sub}</small>` : ""}</span><b>${v}</b></div>`;
-    const ag = !K.asId() || K.sec("agents");
-    return `<div class="box flat mbox" data-hl="card-money"><div class="row"><h3 class="grow">${I("dollar")}Деньги</h3>${edit ? `<button class="btn sm" type="button" data-act="monOpen" data-id="${E(o.id)}" id="btnMonEdit">${I("edit")}Изменить</button>` : ""}</div>
-      ${line("Доставка по тарифу", c ? E(st.tariffLabel(c)) : "", u.usd(o.deliv || 0), "deliv")}
+    const ag = inMoney && (!K.asId() || K.sec("agents"));
+    const head = edit ? `<button class="btn sm" type="button" data-act="monOpen" data-id="${E(o.id)}" id="btnMonEdit">${I("edit")}Изменить</button>`
+      : link ? `<button class="lnkb" type="button" data-act="monProfit" data-id="${E(o.id)}" id="btnMonProfit">${I("edit")}Изменить в «Расходах и прибыли»</button>` : `<span class="muted s12" id="monRo">только просмотр</span>`;
+    return `<div class="box flat mbox" data-hl="card-money"><div class="row"><h3 class="grow">${I("dollar")}Деньги</h3>${head}</div>
+      ${line("Доставка", E(st.delivText(o)), u.usd(o.deliv || 0), "deliv")}
       ${line("Упаковка", E(st.packsText(x.packs || {})), u.usd(o.packUsd || 0), "pack")}
       ${line("Страховка", o.value ? `${fx(pct)}% от стоимости груза ${u.usd(o.value)}${o.insManual ? ", сумма исправлена вручную" : ""}` : "стоимость груза не указана", o.insUsd ? u.usd(o.insUsd) : "нет", "ins")}
       ${o.doorUsd ? line("Расходы в Китае", "доставка до склада и доп. расходы" + (o.doorCny ? ", " + u.cny(o.doorCny) : ""), u.usd(o.doorUsd), "door") : ""}
       ${o.issueExpUsd ? line("Расходы при выдаче за счёт клиента", st.rub(o.issueExpRub), u.usd(o.issueExpUsd), "iexp") : ""}
-      <div class="row mb-tot"><div class="grow"><small class="muted">Итого клиенту</small><div class="big" data-ml="cost">${u.usd(o.cost)}</div></div>${K.paidPill(o)}<button class="sw${st.isPaid(o) ? " on" : ""}" type="button" data-act="togglePaid" data-id="${E(o.id)}" aria-label="Оплачено" title="Отметка «Оплачено»"><i></i></button></div>
+      ${o.dlvUsd ? line(o.dlvWay === "tk" ? "Доставка ТК за счёт клиента" : "Доставка до двери за счёт клиента", st.rub(o.dlvRub), u.usd(o.dlvUsd), "dlv") : ""}
+      <div class="row mb-tot"><div class="grow"><small class="muted">Итого клиенту</small><div class="big" data-ml="cost">${u.usd(o.cost)}</div></div>${K.paidPill(o)}${edit ? `<button class="sw${st.isPaid(o) ? " on" : ""}" type="button" data-act="togglePaid" data-id="${E(o.id)}" aria-label="Оплачено" title="Отметка «Оплачено»"><i></i></button>` : ""}</div>
       ${line("Стоимость груза, объявленная", "для страховки, указывается при упаковке или отправке", o.value ? u.usd(o.value) : '<span class="muted">не указана</span>', "value")}
-      ${ag ? line(`Агенту${K.seeRoute() ? " " + E(o.route) : ""}${a ? ", " + E(a.name) : ""}`, (a ? E(st.agentText(a)) : "агент не найден") + (o.agentManual ? ", сумма исправлена вручную" : "") + (st.agentIsPaid(o) ? " · оплачено агенту" : o.agentPaid > 0 ? " · оплачено " + u.usd(o.agentPaid) : " · агенту не оплачено"), u.usd(o.agentUsd || 0), "agent") : ""}
-      ${K.sec("profit") ? `<div class="pline mini"><span>Расходы ${u.usd(st.expSum(o))}, прибыль <b class="${o.cost - st.expSum(o) >= 0 ? "ok" : "bad"}">${u.usd(o.cost - st.expSum(o))}</b></span><span class="lnk" data-act="d" data-s="profit">Подробнее</span></div>` : ""}</div>`;
+      ${ag ? line(`Агенту${K.seeRoute() ? " " + E(o.route) : ""}${a ? ", " + E(a.name) : ""}`, (o.amode === "rate" || o.amode === "sum" || o.agentManual ? E(st.agentModeText(o)) : a ? E(st.agentText(a)) : "агент не найден") + (st.agentIsPaid(o) ? " · оплачено агенту" : o.agentPaid > 0 ? " · оплачено " + u.usd(o.agentPaid) : " · агенту не оплачено"), u.usd(o.agentUsd || 0), "agent") : ""}
+      ${inMoney && K.sec("profit") ? `<div class="pline mini" data-ml="profit"><span>Расходы ${u.usd(st.expSum(o))}, прибыль <b class="${o.cost - st.expSum(o) >= 0 ? "ok" : "bad"}">${u.usd(o.cost - st.expSum(o))}</b></span>${from !== "profit" ? '<span class="lnk" data-act="d" data-s="profit">Подробнее</span>' : ""}</div>` : ""}</div>`;
   }
-  // окно «Деньги по грузу»: все суммы правятся, каждая правка пишется в историю действий
+  // окно «Деньги по грузу»: все суммы правятся, каждая правка пишется в историю действий.
+  // Доставка клиенту и сумма агенту считаются одним из трёх способов (версия 3.3)
   const MON_F = [["deliv", "Доставка клиенту, $"], ["packUsd", "Упаковка, $"], ["doorUsd", "Расходы в Китае, $"], ["value", "Стоимость груза, $"], ["insUsd", "Страховка, $"], ["agentUsd", "Сумма агенту, $"], ["expPack", "Упаковка, наши расходы, $"], ["expOther", "Прочие расходы, $"]];
+  const v2 = (n) => String(Math.round((n || 0) * 100) / 100).replace(".", ",");
   function monStart(id) {
     const s = st.ship(id); if (!s || !canMoney()) return;
-    const v = (n) => String(Math.round((n || 0) * 100) / 100).replace(".", ",");
-    App.tmp.mon = { id, deliv: v(s.deliv), packUsd: v(s.packUsd), doorUsd: v(s.doorUsd), value: String(s.value || ""), insUsd: v(s.insUsd), agentUsd: v(s.agentUsd), expPack: v(s.exp.pack), expOther: v(s.exp.other) };
+    App.tmp.mon = { id, deliv: v2(s.deliv), packUsd: v2(s.packUsd), doorUsd: v2(s.doorUsd), value: String(s.value || ""), insUsd: v2(s.insUsd), agentUsd: v2(s.agentUsd), expPack: v2(s.exp.pack), expOther: v2(s.exp.other),
+      dmode: s.dmode || "tariff", drate: s.drate ? v2(s.drate) : "", dbasis: s.dbasis || "m3", amode: s.amode || (s.agentManual ? "sum" : "agent"), arate: s.arate ? v2(s.arate) : "", abasis: s.abasis || "kg" };
     monModal();
   }
+  // сумма по выбранному способу: по тарифу или ставке считается сама, «суммой» берётся из поля
+  const monDeliv = (m) => { const s = st.ship(m.id), v = st.delivCalc(s, m.dmode, u.parse(m.drate), m.dbasis); return v == null ? u.parse(m.deliv) : v; };
+  const monAgent = (m) => { const s = st.ship(m.id), v = st.agentByMode(s, m.amode, u.parse(m.arate), m.abasis); return v == null ? u.parse(m.agentUsd) : v; };
   function monCalc(m) {
-    const p = (k) => u.parse(m[k]), cost = p("deliv") + p("packUsd") + p("doorUsd") + p("insUsd") + (st.ship(m.id).issueExpUsd || 0), exp = p("agentUsd") + p("expPack") + p("expOther");
+    const p = (k) => u.parse(m[k]), cost = monDeliv(m) + p("packUsd") + p("doorUsd") + p("insUsd") + (st.ship(m.id).issueExpUsd || 0) + (st.ship(m.id).dlvUsd || 0), exp = monAgent(m) + p("expPack") + p("expOther") + (st.ship(m.id).exp.dlv || 0);
     return { cost, exp, profit: cost - exp };
   }
   const monSum = (m) => { const x = monCalc(m); return `${I("dollar")}<span>Итого клиенту <b>${u.usd(x.cost)}</b>, расходы ${u.usd(x.exp)}, прибыль <b class="${x.profit >= 0 ? "ok" : "bad"}">${u.usd(x.profit)}</b><small>клиент увидит новую стоимость в кабинете, изменения попадут в историю действий</small></span>`; };
+  // подпись расчёта: «1,11 м³ × 330 $ = 366 $» или «812 кг × 1 $ = 812 $»
+  const calcText = (s, rate, basis, sum) => { const t = st.totals(s), q = basis === "kg" ? u.kg(t.weight) : u.vol(t.volume); return `${q} × ${fx(u.parse(rate))} $ = ${u.usd(sum)}`; };
+  const modeCalc = (m, w) => { const s = st.ship(m.id); if (w === "d") return m.dmode === "tariff" ? `${E(st.tariffLabel(st.client(s.clientId)))}: <b>${u.usd(monDeliv(m))}</b>` : m.dmode === "rate" ? calcText(s, m.drate, m.dbasis, monDeliv(m)) : "сумма вписана вручную";
+    const a = st.agentOf(s.route); return m.amode === "agent" ? `${a ? E(st.agentText(a)) : "агент не найден"}: <b>${u.usd(monAgent(m))}</b>` : m.amode === "rate" ? calcText(s, m.arate, m.abasis, monAgent(m)) : "сумма вписана вручную"; };
+  // блок способа расчёта: три кнопки, поле ставки с выбором «за м³ / за кг» или поле суммы, подпись расчёта
+  function modeBlock(m, w) {
+    const D = w === "d", mode = D ? m.dmode : m.amode, rk = D ? "drate" : "arate", bk = D ? "dbasis" : "abasis", sk = D ? "deliv" : "agentUsd";
+    const opts = D ? [["tariff", "По тарифу клиента"], ["rate", "Своя ставка"], ["sum", "Суммой"]] : [["agent", "По ставке агента"], ["rate", "Своя ставка"], ["sum", "Суммой"]];
+    const bases = D ? [["m3", "$ за м³"], ["kg", "$ за кг"]] : [["kg", "$ за кг"], ["m3", "$ за м³"]];
+    const ctl = mode === "rate" ? `<div class="mm-r"><input class="inp" data-in="monIn" data-k="${rk}" inputmode="decimal" value="${E(m[rk])}" placeholder="Ставка, $" aria-label="Своя ставка" data-enter="#btnMonGo" data-hl="mon-${w}rate"><div class="seg sm light">${bases.map(([k, t]) => `<button type="button" class="${m[bk] === k ? "on" : ""}" data-act="monBasis" data-w="${w}" data-k="${k}" data-mb="${w}${k}">${t}</button>`).join("")}</div></div>`
+      : mode === "sum" ? `<div class="mm-r"><input class="inp" data-in="monIn" data-k="${sk}" inputmode="decimal" value="${E(m[sk])}" aria-label="${D ? "Доставка клиенту" : "Сумма агенту"}, $" data-enter="#btnMonGo"></div>` : "";
+    return `<div class="fld mmode" data-hl="mon-${w}mode"><span>${D ? "Доставка клиенту" : "Сумма агенту"}</span><div class="choice cols3">${opts.map(([k, t]) => `<button type="button" class="${mode === k ? "on" : ""}" data-act="monMode" data-w="${w}" data-k="${k}" data-mm="${w}${k}">${t}</button>`).join("")}</div>
+      ${ctl}<div class="mm-c" id="monCalc${w}">${modeCalc(m, w)}</div></div>`;
+  }
   function monModal() {
     const m = App.tmp.mon, s = m && st.ship(m.id); if (!s) return;
     const f = (k, t, hl) => `<label class="fld"${hl ? ` data-hl="${hl}"` : ""}><span>${t}</span><input class="inp" data-in="monIn" data-k="${k}" inputmode="decimal" value="${E(m[k])}" data-enter="#btnMonGo"></label>`, pct = st.S.dir.insPct;
     K.show("mon", `<div class="mh"><div class="mi">${I("dollar")}</div><div><h2>Деньги по грузу</h2><div class="muted s13"><span class="mono">${E(s.id)}</span> · ${E(s.clientId)} ${E(cname(s.clientId))}${K.seeRoute() ? " · маршрут " + E(s.route) : ""}</div></div>${xBtn}</div>
       <h3 class="h3">Клиенту</h3>
-      <div class="row3">${f("deliv", MON_F[0][1], "mon-deliv")}${f("packUsd", MON_F[1][1])}${f("doorUsd", MON_F[2][1])}</div>
+      ${modeBlock(m, "d")}
+      <div class="row2 mt">${f("packUsd", MON_F[1][1])}${f("doorUsd", MON_F[2][1])}</div>
       <div class="row2 mt">${f("value", MON_F[3][1], "mon-value")}<div class="fld"><span>Страховка, $</span><div class="ttf-r"><input class="inp" data-in="monIn" data-k="insUsd" inputmode="decimal" value="${E(m.insUsd)}" data-enter="#btnMonGo" aria-label="Страховка"><button class="btn sm" type="button" data-act="monIns" id="btnMonIns">${I("refresh")}${fx(pct)}% от стоимости</button></div></div></div>
       <h3 class="h3 mt2">Наши расходы</h3>
-      <div class="row3">${f("agentUsd", MON_F[5][1], "mon-agent")}${f("expPack", MON_F[6][1])}${f("expOther", MON_F[7][1])}</div>
+      ${modeBlock(m, "a")}
+      <div class="row2 mt">${f("expPack", MON_F[6][1])}${f("expOther", MON_F[7][1])}</div>
       <div class="found mt" id="monSum">${monSum(m)}</div>
       <div class="mf"><button class="btn" type="button" data-act="monBack">Отмена</button><button class="btn pri" type="button" data-act="monGo" id="btnMonGo">${I("check")}Сохранить</button></div>`, "wide");
   }
@@ -104,17 +136,19 @@
   }
 
   // ---------- «Агенты»: карточки по агентам, треки с галочками, оплата за несколько треков, история оплат ----------
-  const agfDef = () => ({ route: "all", st: "all", over: false, q: "" });
+  const agfDef = () => ({ route: "all", st: "all", over: false, q: "", per: "all", from: "", to: "" });
   const agf = () => App.tmp.agf || (App.tmp.agf = agfDef());
   const agName = (r) => (st.agentOf(r) || {}).name || "";
   function agList() {
     const f = agf(), q = f.q.trim().toUpperCase();
-    return st.S.ships.filter((s) => (s.agentUsd || 0) > 0 && (f.route === "all" || s.route === f.route) && (f.st === "all" || (f.st === "open" ? st.agentDebt(s) >= 0.5 : st.agentIsPaid(s))) && (!f.over || st.overA(s))
+    return st.S.ships.filter((s) => (s.agentUsd || 0) > 0 && inPer(f, s.sentAt) && (f.route === "all" || s.route === f.route) && (f.st === "all" || (f.st === "open" ? st.agentDebt(s) >= 0.5 : st.agentIsPaid(s))) && (!f.over || st.overA(s))
       && (!q || [s.id, s.clientId, cname(s.clientId), cg(s).name].some((x) => String(x || "").toUpperCase().includes(q))))
       .sort((a, b) => (st.agentDebt(b) >= 0.5 ? 1 : 0) - (st.agentDebt(a) >= 0.5 ? 1 : 0) || a.sentAt - b.sentAt);
   }
   function agSel() { const x = (App.tmp.asel2 || []).filter((id) => { const s = st.ship(id); return s && st.agentDebt(s) >= 0.5; }), r = x.length ? st.ship(x[0]).route : null; App.tmp.asel2 = x.filter((id) => st.ship(id).route === r); return App.tmp.asel2; }
   const agPill = (s) => (st.agentIsPaid(s) ? '<span class="st" data-st="in">оплачено</span>' : s.agentPaid > 0 ? `<span class="st" data-st="pack">оплачено ${u.usd(s.agentPaid)}</span>` : '<span class="st" data-st="wait">не оплачено</span>');
+  // колонка «Цена»: по какой ставке посчитана сумма агенту, с пометкой «своя» или «вручную»
+  const priceHtml = (s) => { const p = st.agentPrice(s); return p.mark === "вручную" ? '<span class="st" data-st="pack">вручную</span>' : `${E(p.t)}${p.mark ? ' <span class="st" data-st="pack">своя</span>' : ""}`; };
   function agents() {
     const f = agf(), list = agList(), sel = agSel(), T = st.agentStats(), dirty = f.route !== "all" || f.st !== "all" || f.over || f.q;
     const cards = st.S.dir.agents.map((a) => { const x = st.agentStats(a.route);
@@ -126,20 +160,21 @@
       return `<tr class="click${on ? " sel" : ""}" data-act="openItem" data-t="ship" data-id="${E(s.id)}" data-at="${E(s.id)}"><td class="cbc">${open ? cbx("agSel", s.id, on, "Отметить трек " + s.id) : ""}</td>
         <td><b>${E(s.route)}</b><div class="muted s12 ell1">${E(agName(s.route))}</div></td><td><b class="mono">${E(s.id)}</b><div class="muted s12">${E(s.clientId)} · отправлен ${u.dShort(s.sentAt)}</div></td>
         <td class="r">${u.kg(t.weight)}</td><td class="r">${u.vol(t.volume)}</td><td class="r">${t.volume ? Math.round(t.weight / t.volume) : 0} кг/м³</td>
-        <td class="r"><b>${u.usd(s.agentUsd)}</b>${s.agentPaid > 0 && open ? `<div class="muted s12">долг ${u.usd(st.agentDebt(s))}</div>` : ""}</td><td>${agPill(s)}${st.overA(s) ? ` <span class="st" data-st="unk" data-ov="a">${daysW(st.ageDays(s))}</span>` : ""}</td><td class="r muted">${I("chevron")}</td></tr>`;
+        <td class="nw" data-apr="${E(s.id)}">${priceHtml(s)}</td><td class="r"><b>${u.usd(s.agentUsd)}</b>${s.agentPaid > 0 && open ? `<div class="muted s12">долг ${u.usd(st.agentDebt(s))}</div>` : ""}</td><td>${agPill(s)}${st.overA(s) ? ` <span class="st" data-st="unk" data-ov="a">${daysW(st.ageDays(s))}</span>` : ""}</td><td class="r muted">${I("chevron")}</td></tr>`;
     }).join("");
     const pays = st.S.apays.filter((p) => f.route === "all" || p.route === f.route).slice().sort((a, b) => b.at - a.at);
     return `<div class="pane">
       <div class="ph"><div><h1>Агенты</h1><div class="sub">Агент: перевозчик по маршруту. Сумма по треку считается по ставке агента из настроек. Отметьте треки и оплатите одним платежом. Долг агентам всего ${u.usd(T.debt)}.</div></div><span class="grow"></span>
         <button class="btn" type="button" data-act="agRecon" id="btnAgRecon">${I("scale")}Сверка с агентом</button><button class="btn" type="button" data-act="agExport">${I("download")}<span class="hide-n">Excel</span></button></div>
       <div class="kpis agcs" data-hl="ag-cards">${cards}</div>
+      <div class="fbar ag-per" data-hl="ag-per">${App.D.perBar(f, "agPer", "agDate", PER_O)}<span class="grow"></span><span class="muted s13">по дате отправки</span></div>
       <div class="fbar ag-f" data-hl="ag-f"><div class="seg light sm" data-hl="ag-route">${[["all", "Все агенты"]].concat(st.ROUTES.map((k) => [k, k])).map(([k, t]) => `<button type="button" class="${f.route === k ? "on" : ""}" data-act="agF" data-k="${E(k)}" data-agf="${E(k)}">${E(t)}</button>`).join("")}</div>
         <select class="inp sm" data-chg="agSt" aria-label="Статус оплаты"><option value="all">Все треки</option><option value="open"${f.st === "open" ? " selected" : ""}>Не оплачено</option><option value="paid"${f.st === "paid" ? " selected" : ""}>Оплачено</option></select>
         <button class="chipb${f.over ? " bad" : ""}" type="button" data-act="agOver" id="chipAgOver" aria-pressed="${f.over ? "true" : "false"}">${I("clock")}Старше ${st.OVER_A} дней</button>
         <label class="search">${I("search")}<input data-in="agQ" value="${E(f.q)}" placeholder="Трек, клиент, наименование"></label>
         ${dirty ? `<button class="btn sm ghost" type="button" data-act="agClear">${I("x")}Сбросить</button>` : ""}<span class="grow"></span><span class="muted s13">${list.length} ${u.plural(list.length, "трек", "трека", "треков")}</span></div>
-      <div class="tbx"><table class="tbl ag-t" data-hl="ag-t"><thead><tr><th class="cbc"></th><th>Агент</th><th>Трек</th><th class="r">Вес</th><th class="r">Объём</th><th class="r">Плотность</th><th class="r">Сумма, USD</th><th>Статус</th><th></th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="9" class="muted">${dirty ? "По этим фильтрам треков нет" : "Треков пока нет"}</td></tr>`}</tbody></table></div>
+      <div class="tbx"><table class="tbl ag-t" data-hl="ag-t"><thead><tr><th class="cbc"></th><th>Агент</th><th>Трек</th><th class="r">Вес</th><th class="r">Объём</th><th class="r">Плотность</th><th>Цена</th><th class="r">Сумма, USD</th><th>Статус</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="10" class="muted">${dirty ? "По этим фильтрам треков нет" : "Треков пока нет"}</td></tr>`}</tbody></table></div>
       <div class="wk-foot ag-foot" data-hl="ag-foot"><span class="wk-n">${sel.length ? `Выбрано ${st.tracksWord(sel.length)} агента ${E(r0)}: ${u.usd(sum)}` : "Отметьте неоплаченные треки одного агента"}</span><span class="grow"></span>
         <button class="btn pri" type="button" data-act="agPayOpen" id="btnAgPay" ${sel.length ? "" : "disabled"}>${I("wallet")}Оплатить${sel.length > 1 ? " · " + sel.length : ""}</button></div>
       <h3 class="h3 mt2">Оплаты агентам: сколько, кому и за что</h3>
@@ -185,10 +220,10 @@
       <div class="fbar agr-f"><div class="seg light sm" data-hl="agr-route">${st.ROUTES.map((k) => `<button type="button" class="${x.route === k ? "on" : ""}" data-act="agrRoute" data-k="${E(k)}">${E(k)}</button>`).join("")}</div>
         <label class="dt"><span>с</span><input class="inp sm" type="date" data-in="agrDate" data-k="from" value="${E(x.from)}" aria-label="Сверка с"></label><label class="dt"><span>по</span><input class="inp sm" type="date" data-in="agrDate" data-k="to" value="${E(x.to)}" aria-label="Сверка по"></label></div>
       <div class="ar-tot agr-tot" data-hl="agr-tot"><div><small>Долг на начало</small><b>${u.usd(d.open)}</b></div><div><small>Начислено</small><b>${u.usd(d.ch)}</b></div><div><small>Оплачено</small><b class="ok">${u.usd(d.pay)}</b></div><div><small>Долг на конец</small><b class="${d.close > 0.5 ? "bad" : "ok"}">${u.usd(d.close)}</b></div></div>
-      <div class="tscroll mt"><table class="tbl bare recon"><thead><tr><th>Дата</th><th>Операция</th><th class="r">Начислено</th><th class="r">Оплачено</th><th class="r">Долг</th></tr></thead><tbody>
-        <tr class="muted"><td>${E(x.from ? u.dFull(K.fromISO(x.from)) : "")}</td><td>Долг на начало периода</td><td></td><td></td><td class="r">${u.usd(d.open)}</td></tr>
-        ${d.ops.map((o) => `<tr><td>${u.dFull(o.at)}</td><td>${E(o.t)}</td><td class="r">${o.ch ? u.usd(o.ch) : ""}</td><td class="r ok">${o.pay ? u.usd(o.pay) : ""}</td><td class="r">${u.usd(o.bal)}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">За период операций нет</td></tr>'}
-      </tbody><tfoot><tr><td colspan="2">Итого на ${E(x.to ? u.dFull(K.fromISO(x.to)) : u.dFull(Date.now()))}</td><td class="r">${u.usd(d.ch)}</td><td class="r">${u.usd(d.pay)}</td><td class="r">${u.usd(d.close)}</td></tr></tfoot></table></div>
+      <div class="tscroll mt"><table class="tbl bare recon"><thead><tr><th>Дата</th><th>Операция</th><th>Цена</th><th class="r">Начислено</th><th class="r">Оплачено</th><th class="r">Долг</th></tr></thead><tbody>
+        <tr class="muted"><td>${E(x.from ? u.dFull(K.fromISO(x.from)) : "")}</td><td>Долг на начало периода</td><td></td><td></td><td></td><td class="r">${u.usd(d.open)}</td></tr>
+        ${d.ops.map((o) => `<tr><td>${u.dFull(o.at)}</td><td>${E(o.t)}</td><td class="nw" data-rpr="${E(o.id || "")}">${E(o.price || "")}</td><td class="r">${o.ch ? u.usd(o.ch) : ""}</td><td class="r ok">${o.pay ? u.usd(o.pay) : ""}</td><td class="r">${u.usd(o.bal)}</td></tr>`).join("") || '<tr><td colspan="6" class="muted">За период операций нет</td></tr>'}
+      </tbody><tfoot><tr><td colspan="3">Итого на ${E(x.to ? u.dFull(K.fromISO(x.to)) : u.dFull(Date.now()))}</td><td class="r">${u.usd(d.ch)}</td><td class="r">${u.usd(d.pay)}</td><td class="r">${u.usd(d.close)}</td></tr></tfoot></table></div>
       <div class="mf"><button class="btn" type="button" data-act="toast" data-t="Сверка отправлена агенту ${E(x.route)}" data-i="send">${I("send")}Отправить агенту</button><button class="btn pri" type="button" data-act="agrDl" id="btnAgrDl">${I("download")}Скачать в Excel</button></div>`, "wide");
   }
 
@@ -207,14 +242,17 @@
   function dirAgents() {
     const rows = st.S.dir.agents.map((a) => { const x = st.agentStats(a.route);
       return `<tr data-dag="${E(a.route)}"><td><b>${E(a.route)}</b></td><td><b>${E(a.name)}</b><div class="muted s12">${E(a.contact || "контакт не указан")}</div></td><td class="nw">${fx(a.rate)} $ ${st.BASIS_T[a.basis]}</td><td class="nw">${a.customs ? fx(a.customs) + " $ за кг" : '<span class="muted">нет</span>'}</td>
-        <td class="nw">${a.days ? daysW(a.days) : '<span class="muted">по виду доставки</span>'}</td><td class="r">${x.n}<div class="muted s12">${x.debt >= 0.5 ? "долг " + u.usd(x.debt) : "долга нет"}</div></td><td class="r"><button class="btn sm" type="button" data-act="agEdit" data-k="${E(a.route)}">${I("edit")}Изменить</button></td></tr>`; }).join("");
-    return `${note("Агент: перевозчик по маршруту. Новый агент сразу появляется в выборе маршрута при отправке и в разделе «Агенты». Сумма агенту по треку = ставка за кг или за м³ плюс растаможка за кг. Срок в пути подставляет ожидаемую дату прибытия.")}
-      <div class="tbx"><table class="tbl" data-hl="dir-agents"><thead><tr><th>Маршрут</th><th>Агент</th><th>Ставка</th><th>Растаможка</th><th>Срок в пути</th><th class="r">Треков</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <td class="nw">${a.days ? daysW(a.days) : '<span class="muted">по виду доставки</span>'}</td><td class="stg-t" data-dstg="${E(a.route)}">${(a.stages || []).length ? E(st.stagesText(a)) : '<span class="muted">этапы не заданы</span>'}<div class="muted s12">дата ± ${daysW(a.spread || 0)}, шкала +${u.num(a.grow || 0, (a.grow || 0) % 1 ? 1 : 0)}% в день</div></td><td class="r">${x.n}<div class="muted s12">${x.debt >= 0.5 ? "долг " + u.usd(x.debt) : "долга нет"}</div></td><td class="r"><button class="btn sm" type="button" data-act="agEdit" data-k="${E(a.route)}">${I("edit")}Изменить</button></td></tr>`; }).join("");
+    const cr = st.S.dir.clientRoute;
+    return `${note("Агент: перевозчик по маршруту. Новый агент сразу появляется в выборе маршрута при отправке и в разделе «Агенты». Сумма агенту по треку = ставка за кг или за м³ плюс растаможка за кг. Срок в пути подставляет ожидаемую дату прибытия. Этапы пути двигают шкалу в кабинете клиента сами, по дням после отправки.")}
+      <div class="box dir-box mb12" data-hl="dir-croute"><div class="dir-r"><span><b>Клиент видит маршрут</b><small id="crTxt">${cr ? "маршрут (агент) показывается в кабинете клиента" : "в кабинете клиента маршрут (агент) нигде не показывается"}</small></span><button class="sw${cr ? " on" : ""}" type="button" data-act="crToggle" id="swClientRoute" aria-pressed="${cr ? "true" : "false"}" aria-label="Клиент видит маршрут"><i></i></button></div>
+        <p class="muted s12 p0">Сотрудникам маршрут открывается отдельно: «Сотрудники и доступы», переключатель «Показывать маршрут».</p></div>
+      <div class="tbx"><table class="tbl" data-hl="dir-agents"><thead><tr><th>Маршрут</th><th>Агент</th><th>Ставка</th><th>Растаможка</th><th>Срок в пути</th><th>Этапы пути для шкалы</th><th class="r">Треков</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function dirPack() {
-    const d = App.tmp.dpk || (App.tmp.dpk = Object.assign({}, ...st.PACK.map((k) => ({ [k]: String(st.S.dir.pack[k]).replace(".", ",") })))), ex = { bag: 20, wbox: 10, crate: 6, pallet: 4 };
-    return `${note("Цена упаковки для клиента за одно место. Стоимость упаковки в отправке считается сама: количество мест каждого вида × цена. Сумму по отдельному грузу можно исправить в его карточке.")}
-      <div class="box dir-box" data-hl="dir-pack">${st.PACK.map((k) => `<div class="dir-r"><span><b>${E(st.PACK_RU[k].charAt(0).toUpperCase() + st.PACK_RU[k].slice(1))}</b><small>пример: ${ex[k]} мест = ${u.usd(ex[k] * u.parse(d[k]))}</small></span><label class="dir-in"><input class="inp sm" data-in="dpkIn" data-k="${k}" inputmode="decimal" value="${E(d[k])}" aria-label="Цена: ${E(st.PACK_RU[k])}" data-enter="#btnPackSave"><em>$ за место</em></label></div>`).join("")}
+    const d = App.tmp.dpk || (App.tmp.dpk = Object.assign({}, ...st.PACK.map((k) => ({ [k]: String(st.S.dir.pack[k]).replace(".", ","), ["cny_" + k]: String(st.S.dir.packCny[k] || 0).replace(".", ",") })))), ex = { bag: 20, wbox: 10, crate: 6, pallet: 4 };
+    return `${note("Цена упаковки для клиента за одно место ($) и наша цена на складе в Китае за единицу (¥, своя цена склада задаётся в «Складах в Китае»). Стоимость упаковки в отправке считается сама: количество мест каждого вида × цена. Сумму по отдельному грузу можно исправить в его карточке.")}
+      <div class="box dir-box" data-hl="dir-pack">${st.PACK.map((k) => `<div class="dir-r"><span><b>${E(st.PACK_RU[k].charAt(0).toUpperCase() + st.PACK_RU[k].slice(1))}</b><small>пример: ${ex[k]} мест = ${u.usd(ex[k] * u.parse(d[k]))}</small></span><span class="dir-2"><label class="dir-in"><input class="inp sm" data-in="dpkIn" data-k="${k}" inputmode="decimal" value="${E(d[k])}" aria-label="Цена для клиента: ${E(st.PACK_RU[k])}" data-enter="#btnPackSave"><em>$ клиенту</em></label><label class="dir-in"><input class="inp sm" data-in="dpkIn" data-k="cny_${k}" inputmode="decimal" value="${E(d["cny_" + k])}" aria-label="Наша цена: ${E(st.PACK_RU[k])}" data-enter="#btnPackSave" data-dpc="${k}"><em>¥ наша цена</em></label></span></div>`).join("")}
         <div class="dir-f"><span class="muted s12">Новые цены применятся к следующим отправкам</span><button class="btn pri" type="button" data-act="packSave" id="btnPackSave">${I("check")}Сохранить цены</button></div></div>`;
   }
   function dirIns() {
@@ -263,6 +301,11 @@
       <div class="row3 mt"><label class="fld"><span>Ставка, $ ${st.BASIS_T[d.basis]}</span><input class="inp" data-in="agdIn" data-k="rate" inputmode="decimal" value="${E(d.rate)}" placeholder="0"></label><label class="fld"><span>Растаможка, $ за кг</span><input class="inp" data-in="agdIn" data-k="customs" inputmode="decimal" value="${E(d.customs)}" placeholder="0"></label><label class="fld"><span>Срок в пути, дней</span><input class="inp" data-in="agdIn" data-k="days" inputmode="numeric" value="${E(d.days)}" placeholder="0"></label></div>
       <label class="fld mt"><span>Контакт</span><input class="inp" data-in="agdIn" data-k="contact" value="${E(d.contact)}" placeholder="+7 900 000-00-00" autocomplete="off"></label>
       <div class="found mt" id="agdEx">${agdEx(d)}</div>
+      <h3 class="h3 mt2">Шкала пути в кабинете клиента</h3>
+      <p class="muted s12 p0 mb8">После отправки шкала сама идёт по дням: в нужный день меняется этап, внутри этапа шкала подрастает каждый день. До отметки «Прибыл в Москву» она не заполняется до конца (не больше ${st.TRIP_CEIL}%).</p>
+      <div class="fld"><span>Этапы: название и через сколько дней после отправки</span><div class="stgs" data-hl="agd-stages">${d.stages.map((x, i) => `<div class="stg-r" data-stg="${i}"><input class="inp" data-in="agdStg" data-i="${i}" data-k="name" value="${E(x.name)}" placeholder="Например: На границе" aria-label="Название этапа" autocomplete="off"><label class="stg-d"><input class="inp" data-in="agdStg" data-i="${i}" data-k="day" inputmode="decimal" value="${E(x.day)}" placeholder="0" aria-label="Через сколько дней"><em>дн.</em></label><button class="x sm" type="button" data-act="agdStgDel" data-i="${i}" aria-label="Убрать этап">${I("x")}</button></div>`).join("") || '<p class="muted s12 p0">Этапов нет: шкала идёт равномерно по сроку в пути.</p>'}</div>
+        <button class="btn sm mt8" type="button" data-act="agdStgAdd" id="btnStgAdd">${I("plus")}Добавить этап</button></div>
+      <div class="row2 mt"><label class="fld"><span>Дата прибытия диапазоном, ± дней</span><input class="inp" data-in="agdIn" data-k="spread" inputmode="numeric" value="${E(d.spread)}" placeholder="0"></label><label class="fld"><span>Шкала подрастает, % в день</span><input class="inp" data-in="agdIn" data-k="grow" inputmode="decimal" value="${E(d.grow)}" placeholder="0"></label></div>
       <div class="mf"><button class="btn" type="button" data-act="closeDesk">Отмена</button><button class="btn pri" type="button" data-act="agdGo" id="btnAgdGo" ${err ? "disabled" : ""}>${I("check")}${d.id ? "Сохранить" : "Добавить агента"}</button></div>`, "wide");
   }
   const agdEx = (d) => { const w = 240, v = 1.6, sum = (d.basis === "m3" ? v * u.parse(d.rate) : w * u.parse(d.rate)) + u.parse(d.customs) * w; return `${I("dollar")}<span>Груз ${u.kg(w)}, ${u.vol(v)}: агенту <b>${u.usd(sum)}</b><small>${u.parse(d.days) > 0 ? "прибытие через " + daysW(Math.round(u.parse(d.days))) + " после отправки" : "срок в пути по виду доставки"}</small></span>`; };
@@ -327,13 +370,20 @@
     ptPay: () => { const sel = ptSel(); if (!sel.length) return; App.tmp.pay = null; App.D.payModal(st.ship(sel[0]).clientId, sel.slice()); },
     pOver: () => { const f = pf(); f.over = !f.over; App.tmp.pview = "tracks"; App.refresh(true); },
     pfClear: () => { App.tmp.pf = pfDef(); App.refresh(true); },
+    pfPer: (d) => { const f = pf(); f.per = d.k; if (d.k === "range") App.D.rangeInit(f); App.tmp.pview = "tracks"; App.refresh(true); },
+    agPer: (d) => { const f = agf(); f.per = d.k; if (d.k === "range") App.D.rangeInit(f); App.refresh(true); },
     // деньги по грузу
     monOpen: (d) => monStart(d.id),
     monIns: () => { const m = App.tmp.mon; if (!m) return; m.insUsd = String(st.insCalc(u.parse(m.value))); monModal(); },
     monBack: () => { const m = App.tmp.mon; App.tmp.mon = null; if (m && st.ship(m.id)) App.D.openItem("ship", m.id); else App.closeDesk(); },
+    // смена способа: текущая сумма переносится в поле «Суммой», чтобы её было удобно поправить
+    monMode: (d) => { const m = App.tmp.mon; if (!m) return; if (d.w === "d") { m.deliv = v2(monDeliv(m)); m.dmode = d.k; } else { m.agentUsd = v2(monAgent(m)); m.amode = d.k; } monModal(); },
+    monBasis: (d) => { const m = App.tmp.mon; if (!m) return; m[d.w === "d" ? "dbasis" : "abasis"] = d.k; monModal(); },
+    // ссылка из карточки: открыть «Расходы и прибыль» с этим грузом, там суммы правятся
+    monProfit: (d) => { const s = st.ship(d.id); if (!s) return; App.tmp.period = Math.max(App.tmp.period || 90, st.ageDays(s) + 2); App.go.desk("profit"); setTimeout(() => { App.D.openItem("ship", s.id); scn("monProfit", s.id); }, 320); },
     monGo: () => {
       const m = App.tmp.mon; if (!m || !canMoney()) return;
-      const x = {}; MON_F.forEach(([k]) => { x[k] = u.parse(m[k]); });
+      const x = { dmode: m.dmode, drate: u.parse(m.drate), dbasis: m.dbasis, amode: m.amode, arate: u.parse(m.arate), abasis: m.abasis }; MON_F.forEach(([k]) => { x[k] = u.parse(m[k]); });
       const s = st.setMoney(m.id, x, actor()); App.tmp.mon = null;
       if (s) { App.D.openItem("ship", s.id); App.toast(`Деньги по грузу ${s.id} сохранены: итого клиенту ${u.usd(s.cost)}. Запись в истории`, "dollar"); scn("money", s); }
     },
@@ -362,22 +412,26 @@
     },
     agRecon: () => agrStart(null),
     agrRoute: (d) => { const x = App.tmp.agr; if (x) { x.route = d.k; agrModal(); } },
-    agrDl: () => { const x = App.tmp.agr, d = agrData(); K.csvDl("sverka_agent_" + x.route + "_" + K.today() + ".csv", [["Сверка с агентом", x.route + " " + ((d.agent || {}).name || "")], ["Период", u.dFull(K.fromISO(x.from)) + " – " + u.dFull(K.fromISO(x.to))], [], ["Дата", "Операция", "Начислено, $", "Оплачено, $", "Долг, $"], ["", "Долг на начало периода", "", "", d.open]]
-      .concat(d.ops.map((o) => [u.dFull(o.at), o.t, o.ch || "", o.pay || "", o.bal])).concat([["", "Итого", d.ch, d.pay, d.close]]), "Сверка с агентом " + x.route + " скачана, открывается в Excel"); },
-    agExport: () => K.csvDl("agenty_" + K.today() + ".csv", [["Агент", "Название", "Трек", "Клиент", "Вес, кг", "Объём, м³", "Плотность, кг/м³", "Сумма, $", "Оплачено, $", "Статус", "Дней с отправки"]]
-      .concat(agList().map((s) => { const t = st.totals(s); return [s.route, agName(s.route), s.id, s.clientId, Math.round(t.weight), u.num(t.volume, 2), t.volume ? Math.round(t.weight / t.volume) : 0, s.agentUsd, s.agentPaid || 0, st.agentIsPaid(s) ? "оплачено" : "не оплачено", st.ageDays(s)]; }))),
+    agrDl: () => { const x = App.tmp.agr, d = agrData(); K.csvDl("sverka_agent_" + x.route + "_" + K.today() + ".csv", [["Сверка с агентом", x.route + " " + ((d.agent || {}).name || "")], ["Период", u.dFull(K.fromISO(x.from)) + " – " + u.dFull(K.fromISO(x.to))], [], ["Дата", "Операция", "Цена", "Начислено, $", "Оплачено, $", "Долг, $"], ["", "Долг на начало периода", "", "", "", d.open]]
+      .concat(d.ops.map((o) => [u.dFull(o.at), o.t, o.price || "", o.ch || "", o.pay || "", o.bal])).concat([["", "Итого", "", d.ch, d.pay, d.close]]), "Сверка с агентом " + x.route + " скачана, открывается в Excel"); },
+    agExport: () => K.csvDl("agenty_" + K.today() + ".csv", [["Агент", "Название", "Трек", "Клиент", "Вес, кг", "Объём, м³", "Плотность, кг/м³", "Цена", "Сумма, $", "Оплачено, $", "Статус", "Дней с отправки"]]
+      .concat(agList().map((s) => { const t = st.totals(s); return [s.route, agName(s.route), s.id, s.clientId, Math.round(t.weight), u.num(t.volume, 2), t.volume ? Math.round(t.weight / t.volume) : 0, st.agentPrice(s).t + (st.agentPrice(s).mark === "своя" ? " (своя)" : ""), s.agentUsd, s.agentPaid || 0, st.agentIsPaid(s) ? "оплачено" : "не оплачено", st.ageDays(s)]; }))),
     // настройки
     stab: (d) => { App.tmp.stab = d.k; App.tmp.dpk = null; App.tmp.dins = null; App.tmp.drt = null; App.refresh(true); scn("stab", d.k); },
-    agNew: () => { App.tmp.agd = { id: null, route: "", name: "", basis: "kg", rate: "", customs: "", days: "", contact: "" }; agModal(); },
-    agEdit: (d) => { const a = st.agentOf(d.k); if (!a) return; App.tmp.agd = { id: a.route, route: a.route, name: a.name, basis: a.basis, rate: String(a.rate).replace(".", ","), customs: String(a.customs || "").replace(".", ","), days: String(a.days || ""), contact: a.contact || "" }; agModal(); },
+    agNew: () => { App.tmp.agd = { id: null, route: "", name: "", basis: "kg", rate: "", customs: "", days: "", contact: "", stages: [{ name: "На границе", day: "" }, { name: "Таможенное оформление", day: "" }], spread: "2", grow: "1,5" }; agModal(); },
+    agEdit: (d) => { const a = st.agentOf(d.k); if (!a) return; App.tmp.agd = { id: a.route, route: a.route, name: a.name, basis: a.basis, rate: String(a.rate).replace(".", ","), customs: String(a.customs || "").replace(".", ","), days: String(a.days || ""), contact: a.contact || "",
+      stages: (a.stages || []).map((x) => ({ name: x.name, day: String(x.day).replace(".", ",") })), spread: String(a.spread || 0), grow: String(a.grow || 0).replace(".", ",") }; agModal(); },
+    agdStgAdd: () => { const x = App.tmp.agd; if (x && x.stages.length < 8) { x.stages.push({ name: "", day: "" }); agModal(); } },
+    agdStgDel: (d) => { const x = App.tmp.agd; if (x) { x.stages.splice(+d.i, 1); agModal(); } },
+    crToggle: () => { const v = !st.S.dir.clientRoute; st.routeSave(v, actor()); App.refresh(true); App.toast(v ? "Клиенты видят маршрут в своём кабинете" : "Маршрут скрыт из кабинета клиентов", "route"); scn("croute", v); },
     agdBasis: (d) => { const x = App.tmp.agd; if (x) { x.basis = d.k; agModal(); } },
-    agdFill: () => { const x = App.tmp.agd; if (!x) return; if (!x.id && st.agentCheck(x.route, true)) x.route = ["92G", "93G", "95G"].find((r) => !st.agentOf(r)) || x.route; x.name = x.name || "Восточный Экспресс"; x.rate = x.rate || "1,3"; x.customs = x.customs || "0,25"; x.days = x.days || "15"; x.contact = x.contact || "+7 900 000-00-55"; agModal(); },
+    agdFill: () => { const x = App.tmp.agd; if (!x) return; if (!x.id && st.agentCheck(x.route, true)) x.route = ["92G", "93G", "95G"].find((r) => !st.agentOf(r)) || x.route; x.name = x.name || "Восточный Экспресс"; x.rate = x.rate || "1,3"; x.customs = x.customs || "0,25"; x.days = x.days || "15"; x.contact = x.contact || "+7 900 000-00-55"; x.stages.forEach((y, i) => { if (!y.day) y.day = i ? "12" : "4"; }); agModal(); },
     agdGo: () => {
       const x = App.tmp.agd; if (!x || (!x.id && st.agentCheck(x.route, true))) return;
-      const a = st.agentSave({ id: x.id, route: x.route, name: x.name, basis: x.basis, rate: u.parse(x.rate), customs: u.parse(x.customs), days: u.parse(x.days), contact: x.contact }, actor());
+      const a = st.agentSave({ id: x.id, route: x.route, name: x.name, basis: x.basis, rate: u.parse(x.rate), customs: u.parse(x.customs), days: u.parse(x.days), contact: x.contact, stages: x.stages.map((y) => ({ name: y.name, day: u.parse(y.day) })), spread: u.parse(x.spread), grow: u.parse(x.grow) }, actor());
       App.tmp.agd = null; App.closeDesk(); if (a) App.toast(`${x.id ? "Агент изменён" : "Агент добавлен"}: ${a.route} ${a.name}. Маршрут есть в окне «Отправить»`, "route");
     },
-    packSave: () => { const n = st.packSave(Object.assign({}, ...st.PACK.map((k) => ({ [k]: u.parse((App.tmp.dpk || {})[k]) }))), actor()); App.tmp.dpk = null; App.refresh(true); App.toast(n ? "Цены упаковки сохранены: применятся к следующим отправкам" : "Цены не изменились", n ? "check" : "info"); },
+    packSave: () => { const n = st.packSave(Object.assign({}, ...st.PACK.map((k) => ({ [k]: u.parse((App.tmp.dpk || {})[k]) }))), actor()) + st.chwPriceSave("all", Object.assign({}, ...st.PACK.map((k) => ({ [k]: u.parse((App.tmp.dpk || {})["cny_" + k]) }))), actor()); App.tmp.dpk = null; App.refresh(true); App.toast(n ? "Цены упаковки сохранены: применятся к следующим отправкам" : "Цены не изменились", n ? "check" : "info"); },
     insSave: () => { const ok = st.insSave(u.parse(App.tmp.dins != null ? App.tmp.dins : st.S.dir.insPct), actor()); App.tmp.dins = null; App.refresh(true); App.toast(ok ? `Страховка ${fx(st.S.dir.insPct)}% сохранена: применится к следующим отправкам` : "Процент не изменился", ok ? "check" : "info"); },
     ratesSave: () => { const d = drtDraft(), n = st.ratesSave(Object.assign({}, ...st.RATE_K.map((k) => ({ [k]: { markup: u.parse(d[k].markup), manual: u.parse(d[k].manual) } }))), actor()); App.tmp.drt = null; App.refresh(true); App.toast(n ? "Курсы валют сохранены: итоговый курс подставится в оплату" : "Курсы не изменились", n ? "check" : "info"); },
     rateCb: (d) => { const ok = st.rateCb(d.k, actor()); App.tmp.drt = null; App.refresh(true); if (ok) App.toast(`${st.CUR[d.k].t}: снова курс ЦБ с надбавкой, ${u.num(st.CUR[d.k].rate, 2)} ${st.CUR[d.k].s} за 1 $`, "refresh"); },
@@ -392,9 +446,11 @@
   });
   Object.assign(App.ins, {
     pfQ: (v) => { pf().q = v; App.refresh(true); },
-    monIn: (v, el) => { const m = App.tmp.mon; if (!m) return; m[el.dataset.k] = v; const o = $("monSum"); if (o) o.innerHTML = monSum(m); },
+    monIn: (v, el) => { const m = App.tmp.mon; if (!m) return; m[el.dataset.k] = v; const o = $("monSum"); if (o) o.innerHTML = monSum(m); ["d", "a"].forEach((w) => { const c = $("monCalc" + w); if (c) c.innerHTML = modeCalc(m, w); }); },
     sndVal: (v, el) => { const d = App.tmp.snd; if (!d) return; (d.values = d.values || {})[el.dataset.k] = v; const c = st.cargo(el.dataset.k), o = document.querySelector(`[data-svc="${el.dataset.k}"]`); if (c && o) o.innerHTML = svText(c, d); },
     agQ: (v) => { agf().q = v; App.refresh(true); },
+    pfDate: (v, el) => { pf()[el.dataset.k] = v; App.refresh(true); },
+    agDate: (v, el) => { agf()[el.dataset.k] = v; App.refresh(true); },
     agpIn: (v, el) => { const x = App.tmp.agp; if (!x) return; x[el.dataset.k] = v; if (el.dataset.k === "amount") x.auto = false; const o = $("agpSum"); if (o) o.innerHTML = agSumHtml(x); },
     agrDate: (v, el) => { const x = App.tmp.agr; if (!x) return; x[el.dataset.k] = v; agrModal(); },
     dpkIn: (v, el) => { const d = App.tmp.dpk; if (d) d[el.dataset.k] = v; },
@@ -402,6 +458,7 @@
     drtIn: (v, el) => { const d = drtDraft(), k = el.dataset.k; d[k][el.dataset.f] = v; const c = drtCalc(k), f = document.querySelector(`[data-rf="${k}"]`), sr = document.querySelector(`[data-rs="${k}"]`); if (f) f.textContent = u.num(c.rate, 2); if (sr) sr.innerHTML = srcPill(c.manual); },
     agdIn: (v, el) => { const x = App.tmp.agd; if (!x) return; x[el.dataset.k] = v; const ex = $("agdEx"); if (ex) ex.innerHTML = agdEx(x); if (el.dataset.k !== "route" || x.id) return; const err = st.agentCheck(v, true), box = el.closest(".ttf"), msg = $("agdMsg"), b = $("btnAgdGo"); if (box) box.classList.toggle("err", !!err && !!v); if (msg) msg.textContent = err || "Маршрут свободен"; if (b) b.disabled = !!err; },
     whdIn: (v, el) => { if (App.tmp.whd) App.tmp.whd[el.dataset.k] = v; },
+    agdStg: (v, el) => { const x = App.tmp.agd; if (x && x.stages[+el.dataset.i]) x.stages[+el.dataset.i][el.dataset.k] = v; },
     tkdIn: (v, el) => { const x = App.tmp.tkd; if (!x) return; x[el.dataset.k] = v; if (el.dataset.k !== "name") return; const dup = st.S.dir.tks.some((t, j) => String(j) !== String(x.i) && t.name.toLowerCase() === v.trim().toLowerCase()), m = $("tkdMsg"), b = $("btnTkdGo"); if (m) { m.textContent = dup ? "Такая компания уже есть" : "Обязательно только название"; m.classList.toggle("bad", dup); } if (b) b.disabled = dup || !v.trim(); },
     qsQ: (v) => qsPaint(v),
   });

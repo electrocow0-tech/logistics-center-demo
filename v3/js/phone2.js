@@ -24,8 +24,10 @@
   const sgn = (n, cur) => (n < 0 ? "−" : n > 0 ? "+" : "") + st.wamt(Math.abs(n), cur);
   const mhead = (t, right) => K.head(t, "Склад в Москве · " + E(st.who(BY)), right);
   const back = (s, t, p) => `<div class="pback" data-act="p" data-s="${s}"${p ? ` data-p="${E(p)}"` : ""}>${I("back")}${t}</div>`;
-  const recvLines = (o) => line("Получатель", (E(o.recv.name) || "не указан") + (o.recv.phone ? "<small>" + E(o.recv.phone) + "</small>" : ""))
-    + (o.recv.addr ? `<div class="pline maddr"><span>Адрес<small>${E(o.recv.addr)}</small></span>${App.DK.copyBtn(o.recv.addr, "Адрес")}</div>` : "");
+  // блок выдачи: «Копировать» в правом верхнем углу копирует весь блок одним текстом, адрес на всю ширину
+  const issBlock = (o) => `<div class="ib" data-ib="${E(o.id)}"><div class="ib-h"><span>Способ выдачи</span><button class="lnkb" type="button" data-act="copyIss" data-id="${E(o.id)}" data-ibc="${E(o.id)}">${I("copy")}Копировать</button></div><b class="ib-w">${E(wayT(o))}</b></div>`
+    + line("Получатель", (E(o.recv.name) || "не указан") + (o.recv.phone ? "<small>" + E(o.recv.phone) + "</small>" : ""))
+    + (o.recv.addr && o.way !== "pickup" ? `<div class="pline ib-a"><span>Адрес</span><b>${E(o.recv.addr)}</b></div>` : "");
   let photoSeq = 700;
 
   // ================= 1. ГРУЗЫ: «Готов к выдаче» и «Хранение» по кодам клиентов =================
@@ -58,7 +60,7 @@
   function orderCard(o) {
     const due = st.issueRest(o);
     return `<div class="pcard cmd mord" data-ord="${E(o.id)}" data-hl="m-order"><div class="t"><span class="plabel">${I("bell")}Заказ ${E(o.id)}</span>${ordPill(o)}</div>
-      ${line("Способ выдачи", E(wayT(o)))}${recvLines(o)}${line("Расходы при выдаче", o.payer === "client" ? "платит клиент" : "платим мы")}
+      ${issBlock(o)}${o.dlv ? `<div class="pline" data-mdlv="${E(o.id)}"><span>${E(st.dlvLabel(o))}</span><b>${E(st.dlvText(o).replace(/^[^:]+: /, ""))}</b></div>` : ""}${line("Расходы склада при выдаче", o.payer === "client" ? "платит клиент" : "платим мы")}
       ${line("Получить оплату", due > 0 ? `<span class="bad">${st.rub(due)}</span>` : o.gotRub ? `<span class="ok">получено ${st.rub(o.gotRub)}</span>` : "не нужно")}
       ${o.note ? `<div class="mnote">${I("info")}<span><small>Примечание администратора</small>${E(o.note)}</span></div>` : ""}
       <span class="sub">Команду дал ${E(st.who(o.by))}, ${u.when(o.at)}</span></div>`;
@@ -118,7 +120,7 @@
   // черновик фотоотчёта по треку: ни одно поле не обязательно
   function mdraft(id) {
     const m = App.tmp.mrep || (App.tmp.mrep = {});
-    if (!m[id]) m[id] = { photos: [], dmg: null, dmgText: "", exp: { load: "", pallet: "", fork: "", other: "" }, note: "", waybill: "" };
+    if (!m[id]) { const o = st.issueOf(st.ship(id)); m[id] = { photos: [], dmg: null, dmgText: "", exp: { load: "", pallet: "", fork: "", other: "" }, note: "", waybill: "", dlvRub: o && o.dlv && o.dlv.rub ? String(o.dlv.rub) : "" }; }
     return m[id];
   }
   const expSum = (d) => st.REPX.reduce((a, [k]) => a + u.parse(d.exp[k]), 0);
@@ -129,11 +131,12 @@
     return `<div class="pp">${back("mrep", "Фотоотчёт")}
       ${K.head(`<span class="mono">${E(s.id)}</span>`, E(s.clientId) + " · " + E(cn(s.clientId)) + " · заказ " + E(o.id), pill("pack", "Выдают"))}
       <div class="pcard">${c && c.photos.length ? `<div class="photos">${c.photos.slice(0, 3).map((x) => `<button class="ph-i" type="button" data-act="zoom" data-p="${x}" data-kind="${kind}">${u.photo(x, kind)}</button>`).join("")}</div>` : ""}${line("Вес", u.kg(t.weight))}${line("Объём", u.vol(t.volume))}${line("Мест", u.places(t.places))}${c ? line("Упаковка", E(st.packsText(c.packs))) : ""}</div>
-      <div class="pcard cmd">${line("Способ выдачи", E(wayT(o)))}${recvLines(o)}</div>
+      <div class="pcard cmd">${issBlock(o)}${o.dlv ? `<div class="pline"><span>${E(st.dlvLabel(o))}</span><b>${E(st.dlvText(o).replace(/^[^:]+: /, ""))}</b></div>` : ""}</div>
       <div class="fld mt"><span>Фото выдачи</span><div data-f="mcam" data-hl="m-cam">${K.camHtml(d.photos, "mrepPhoto", kind)}</div></div>
       <div class="fld mt"><span>Повреждение</span><div class="choice cols2" data-hl="m-dmg"><button type="button" class="${d.dmg === "no" ? "on" : ""}" data-act="mrepDmg" data-k="no">Нет</button><button type="button" class="${d.dmg === "yes" ? "on" : ""}" data-act="mrepDmg" data-k="yes">Есть</button></div>
         <div class="doorbox" data-f="mdmgBox" ${d.dmg === "yes" ? "" : "hidden"}><input class="inp" data-in="mrepIn" data-k="dmgText" value="${E(d.dmgText)}" placeholder="Что повреждено" autocomplete="off"></div></div>
-      <div class="fld mt"><span>Расходы при выдаче, ₽</span><div class="mexp" data-hl="m-exp">${st.REPX.map(([k, tt]) => `<label class="fld"><span>${tt}</span><input class="inp" data-in="mrepExp" data-k="${k}" inputmode="numeric" value="${E(d.exp[k])}" placeholder="0"></label>`).join("")}</div>
+      ${o.dlv ? `<label class="fld mt" data-hl="m-dlv"><span>${E(st.dlvLabel(o))}, ₽: платит ${o.dlv.payer === "client" ? "клиент" : "компания"}</span><input class="inp" data-in="mrepIn" data-k="dlvRub" inputmode="numeric" value="${E(d.dlvRub)}" placeholder="сумму можно уточнить" id="mDlv"></label>` : ""}
+      <div class="fld mt"><span>Расходы склада при выдаче (погрузка, снять паллет, кара), ₽</span><div class="mexp" data-hl="m-exp">${st.REPX.map(([k, tt]) => `<label class="fld"><span>${tt}</span><input class="inp" data-in="mrepExp" data-k="${k}" inputmode="numeric" value="${E(d.exp[k])}" placeholder="0"></label>`).join("")}</div>
         <div class="req left" data-f="mexpSum">${expHint(d, o)}</div></div>
       ${o.way === "tk" ? `<label class="fld mt"><span>Номер накладной${o.tk ? " " + E(o.tk) : " ТК"}</span><input class="inp mono" data-in="mrepIn" data-k="waybill" value="${E(d.waybill)}" placeholder="Например, 25-00418-331907" autocomplete="off" spellcheck="false" data-hl="m-waybill"></label>` : ""}
       <label class="fld mt"><span>Примечание</span><input class="inp" data-in="mrepIn" data-k="note" value="${E(d.note)}" placeholder="${o.way === "tk" ? "Например: забрал водитель ТК" : "Всё, что важно знать о выдаче"}" autocomplete="off"></label>
@@ -146,7 +149,7 @@
     const s = st.ship(id); if (!s) return;
     const d = mdraft(id), exp = {};
     st.REPX.forEach(([k]) => { exp[k] = u.parse(d.exp[k]); });
-    const r = st.issueDone(id, { photos: d.photos, damage: d.dmg === "yes" ? d.dmgText.trim() || "Есть повреждение" : "", exp, note: d.note, waybill: d.waybill, by: BY });
+    const r = st.issueDone(id, { photos: d.photos, damage: d.dmg === "yes" ? d.dmgText.trim() || "Есть повреждение" : "", exp, note: d.note, waybill: d.waybill, dlvRub: d.dlvRub, by: BY });
     App.closeSheet(SLOT); if (!r) return;
     delete App.tmp.mrep[id];
     App.toast(r.issue.type === "tk" ? `Груз ${r.id} передан в ${r.issue.tk}, накладная ${r.issue.waybill}. Клиент получил уведомление` : `Груз ${r.id} выдан, клиент получил уведомление`, "check");

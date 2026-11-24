@@ -44,10 +44,10 @@
 
   // ---------- меню ----------
   // версия 3.2: вкладки «Денег» вынесены в левое меню отдельными пунктами группы «Деньги», «Сотрудники и доступы» стали вкладкой «Настроек»
-  const SCREEN_SEC = { board: "cargo", work: "cargo", clients: "clients", client: "clients", cons: "ships", money: "money", profit: "profit", agents: "agents", tariffs: "tariffs", mskfin: "mskfin", reports: "reports", staff: "staff", history: "history" };
+  const SCREEN_SEC = { board: "cargo", work: "cargo", clients: "clients", client: "clients", cons: "ships", money: "money", profit: "profit", agents: "agents", tariffs: "tariffs", mskfin: "mskfin", chwh: "chwh", reports: "reports", news: "news", staff: "staff", history: "history" };
   const NAV = [["board", "board", "Грузы (информация)"], ["work", "layers", "Грузы"], ["clients", "users", "Клиенты"], ["cons", "truck", "Отправки"],
-    ["g:money", "", "Деньги"], ["money", "wallet", "Оплаты клиентов"], ["profit", "scale", "Расходы и прибыль"], ["agents", "route", "Агенты"], ["mskfin", "wh", "Склад в Москве"], ["tariffs", "dollar", "Тарифы клиентов"], ["g:end"],
-    ["reports", "chart", "Отчёты"], ["staff", "sliders", "Настройки"], ["history", "history", "История действий"]];
+    ["g:money", "", "Деньги"], ["money", "wallet", "Оплаты клиентов"], ["profit", "scale", "Расходы и прибыль"], ["agents", "route", "Агенты"], ["mskfin", "wh", "Склад в Москве"], ["chwh", "layers", "Склады в Китае"], ["tariffs", "dollar", "Тарифы клиентов"], ["g:end"],
+    ["reports", "chart", "Отчёты"], ["news", "news", "Новости и рассылки"], ["staff", "sliders", "Настройки"], ["history", "history", "История действий"]];
   const allowed = (s) => s === "none" || (!!SCREEN_SEC[s] && sec(SCREEN_SEC[s]));
   // если сотруднику не открыт ни один раздел, показывается спокойная заглушка
   const home = () => { const n = NAV.find((x) => x[0].indexOf("g:") !== 0 && allowed(x[0])); return n ? n[0] : "none"; };
@@ -241,18 +241,19 @@
   // форма упаковки за склад: найденные грузы, количество по видам, размеры, вес, фото
   function tpDraft(t) {
     let d = App.tmp.tp;
-    if (!d || d.id !== t.id) d = App.tmp.tp = { id: t.id, found: t.receiptIds.slice(), packs: {}, dims: [{ l: "", w: "", h: "", n: "" }], weight: "", photos: [], note: "" };
+    if (!d || d.id !== t.id) d = App.tmp.tp = { id: t.id, found: t.receiptIds.slice(), packs: {}, dims: [{ l: "", w: "", h: "", n: "" }], weight: "", volMan: "", photos: [], note: "" };
+    if (!d.dims.length) d.dims.push({ l: "", w: "", h: "", n: "" }); // хотя бы одна пустая строка размеров
     d.found = d.found.filter((id) => t.receiptIds.includes(id));
     return d;
   }
-  const dimRow = (x, i, n) => `<div class="dim" data-dim="${i}">${["l", "w", "h", "n"].map((k, j) => `<input class="inp" data-in="tpDim" data-i="${i}" data-k="${k}" inputmode="numeric" value="${E(x[k])}" placeholder="${["Длина", "Ширина", "Высота", "Мест"][j]}" aria-label="${["Длина", "Ширина", "Высота", "Мест"][j]}">${j < 3 ? '<i>×</i>' : ""}`).join("")}<button class="x sm" type="button" data-act="tpDimDel" data-i="${i}" aria-label="Убрать строку" ${n > 1 ? "" : "disabled"}>${I("x")}</button></div>`;
+  const dimRow = (x, i, n) => `<div class="dimr" data-dim="${i}">${["l", "w", "h", "n"].map((k, j) => `<input class="inp" data-in="tpDim" data-i="${i}" data-k="${k}" inputmode="numeric" value="${E(x[k])}" placeholder="${["Длина", "Ширина", "Высота", "Мест"][j]}" aria-label="${["Длина", "Ширина", "Высота", "Мест"][j]}">${j < 3 ? '<i>×</i>' : ""}`).join("")}<button class="x sm" type="button" data-act="tpDimDel" data-i="${i}" aria-label="Убрать строку" ${n > 1 ? "" : "disabled"}>${I("x")}</button></div>`;
   function taskForm(t) {
     const d = tpDraft(t), rs = t.receiptIds.map(st.rec).filter(Boolean), vol = st.dimsVolume(d.dims);
     return `<div class="box act" data-hl="tp-box"><h3>${I("layers")}Упаковать за склад</h3><p>Обычно это делает кладовщик с телефона. Если склад не успевает, внесите данные сами: процесс не должен стоять.</p>
       ${t.status === "collect" ? `<div class="fld"><span>Найденные грузы</span><div class="tp-found">${rs.map((r) => `<button type="button" class="prow${d.found.includes(r.id) ? " on" : ""}" data-act="tpFound" data-id="${E(r.id)}"><span class="cb">${d.found.includes(r.id) ? I("check") : ""}</span><span class="ct"><b>${r.track ? E(r.track) : E(r.id)}</b><small>${E(r.supplier)} · ${u.places(r.places)}</small></span></button>`).join("")}</div></div>` : ""}
       <div class="fld mt8"><span>Количество по видам упаковки</span><div class="tp-packs">${st.PACK.map((k) => `<label><span>${L.t("pk_" + k)}</span><input class="inp" data-in="tpPack" data-k="${k}" inputmode="numeric" value="${E(d.packs[k] || "")}" placeholder="0"></label>`).join("")}</div></div>
       <div class="fld mt8"><span>Размеры, см: длина × ширина × высота × мест</span><div class="dims" id="tpDims">${d.dims.map((x, i) => dimRow(x, i, d.dims.length)).join("")}</div><button class="btn sm" type="button" data-act="tpDimAdd">${I("plus")}Добавить ещё</button></div>
-      <div class="row2 mt8"><label class="fld"><span>Вес, кг</span><input class="inp" data-in="tpIn" data-k="weight" inputmode="decimal" value="${E(d.weight)}" placeholder="0"></label><div class="fld"><span>Объём считается сам</span><div class="inp ro" id="tpVol">${u.vol(vol)}</div></div></div>
+      <div class="row3 mt8"><label class="fld"><span>Вес, кг</span><input class="inp" data-in="tpIn" data-k="weight" inputmode="decimal" value="${E(d.weight)}" placeholder="0"></label><div class="fld"><span>Объём по размерам</span><div class="inp ro" id="tpVol">${u.vol(vol)}</div></div><label class="fld"><span>Или вручную, м³</span><input class="inp" data-in="tpIn" data-k="volMan" inputmode="decimal" value="${E(d.volMan || "")}" placeholder="главнее размеров" id="tpVolMan"></label></div>
       <div class="fld mt8"><span>Фото упакованного груза</span><div class="cam sm">${d.photos.map((p) => `<div class="shot">${u.photo(p, t.packPlan[0] || "bag")}</div>`).join("")}${d.photos.length < 3 ? `<button class="add" type="button" data-act="tpPhoto">${I("camera")}<span>${d.photos.length ? "Ещё" : "Добавить"}</span></button>` : ""}</div></div>
       <button class="btn pri lg block mt" type="button" data-act="taskPack" data-id="${E(t.id)}" id="btnCardNext" ${d.found.length ? "" : "disabled"}>${I("check")}Упаковано</button></div>`;
   }
@@ -281,7 +282,7 @@
     }
     if (t === "cargo") { const s = st.ship(o.id); return `<div class="box act"><h3>${I("truck")}Отправлен</h3>${s ? linkrow("ship", s.id, "truck", "Отправка " + E(s.id), (seeRoute() ? "маршрут " + E(s.route) + " · " : "") + E(s.dest) + " · " + L.t("st_" + s.status).toLowerCase()) : ""}</div>`; }
     const editB = can("dispatch") ? `<button class="btn block mt8" type="button" data-act="shipEdit" data-id="${E(o.id)}">${I("edit")}Исправить данные отправки</button>` : "";
-    if (stage === "way") return `<div class="box act"><h3>${I("truck")}В пути</h3><p>${seeRoute() ? "Маршрут " + E(o.route) + ", " : ""}${E(o.dest)}. Прибытие около ${u.dLong(o.eta)}. Когда груз придёт, отметьте прибытие: он ляжет на хранение, клиент получит уведомление.</p>
+    if (stage === "way") return `<div class="box act"><h3>${I("truck")}В пути</h3>${App.D.tripHtml ? App.D.tripHtml(o, { key: "d", hl: "card-trip", auto: true }) : ""}<p class="mt8">${seeRoute() ? "Маршрут " + E(o.route) + ", " : ""}${E(o.dest)}. Этап и шкала меняются сами по дням, как у клиента. До конца шкала заполнится, когда вы отметите прибытие: груз ляжет на хранение, клиент получит уведомление.</p>
       ${can("arrive") ? `<button class="btn pri lg block" type="button" data-act="arrive" data-id="${E(o.id)}" data-arr="${E(o.id)}" ${nextId}>${I("pin")}Прибыл в Москву</button>` : '<p class="muted s13 p0">Прибытие отмечает администратор или сотрудник с доступом.</p>'}${editB}</div>`;
     const ord = st.issueOf(o), ordB = ord ? `<button class="btn block mt8" type="button" data-act="issOpen" data-id="${E(ord.id)}">${I("file")}Открыть заказ на выдачу ${E(ord.id)}</button>` : "";
     if (stage === "arrived" && o.sub === "store") return `<div class="box act" data-hl="iss-box"><h3>${I("wh")}На хранении в Москве</h3><p>Груз прибыл ${u.dLong(o.arrivedAt)} и лежит на складе в Москве. Дайте команду «Выдать»: склад увидит получателя, способ выдачи и сумму, которую нужно получить.</p>
@@ -333,14 +334,14 @@
     } else if (t === "cargo") {
       const recs = o.receiptIds.map(st.rec).filter(Boolean);
       left = photosHtml(o.photos.map((p) => `<div class="ph-i">${u.photo(p, o.packType)}<em>упаковка</em></div>`).concat(recs.filter((r) => r.photos.length).slice(0, 2).map((r) => `<div class="ph-i">${u.photo(r.photos[0])}<em>приёмка</em></div>`)))
-        + `<dl class="kv">${ttRow(t, o)}<dt>Наименование</dt><dd>${E(o.name) || '<span class="muted">не указано</span>'}</dd><dt>Упаковка</dt><dd>${E(st.packsText(o.packs))}</dd><dt>Мест</dt><dd>${u.places(o.places)}</dd><dt>Вес и объём</dt><dd>${u.kg(o.weight)} · ${u.vol(o.volume)}${o.volume ? " · " + Math.round(o.weight / o.volume) + " кг/м³" : ""}</dd>
+        + `<dl class="kv">${ttRow(t, o)}<dt>Наименование</dt><dd>${E(o.name) || '<span class="muted">не указано</span>'}</dd><dt>Упаковка</dt><dd>${E(st.packsText(o.packs))}</dd><dt>Мест</dt><dd>${u.places(o.places)}</dd><dt>Вес и объём</dt><dd>${u.kg(o.weight)} · ${u.vol(o.volume)}${o.volManual ? ' <span class="st" data-st="pack" data-vm="1">вручную</span>' : ""}${o.volume ? " · " + Math.round(o.weight / o.volume) + " кг/м³" : ""}</dd>
           <dt>Размеры, см</dt><dd>${o.dims.map((x) => `${x.l} × ${x.w} × ${x.h}, ${u.places(x.n)}`).join("<br>") || '<span class="muted">не указаны</span>'}</dd><dt>Склад</dt><dd>${E(whn(o.wh))}, упаковал ${E(st.who(o.by))} ${u.dShort(o.at)}</dd>${o.note ? `<dt>Примечание</dt><dd>${E(o.note)}</dd>` : ""}</dl>
 ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано иначе: заказано ${E(plan(o.packPlan))}, фактически ${E(st.packsText(o.packs))}. Запись есть в истории действий.</div>` : ""}
         <div><h3 class="h3">Из чего собран груз</h3>${recs.map(recRow).join("")}</div>`;
     } else {
       const x = st.totals(o), has = (n) => o.docs.some((d) => d.name.indexOf(n) === 0), edit = can("dispatch"), ord = st.issueOf(o);
       left = (o.rep && o.rep.photos.length ? photosHtml(o.rep.photos.map((p) => `<div class="ph-i">${u.photo(p, cg ? cg.packType : undefined)}<em>выдача</em></div>`)) : cg && cg.photos.length ? photosHtml(cg.photos.map((p) => `<div class="ph-i">${u.photo(p, cg.packType)}<em>упаковка</em></div>`)) : "")
-        + `<dl class="kv">${ttRow(t, o)}<dt>Вид доставки</dt><dd>${E(TR(o.transport).label)}</dd>${seeRoute() ? `<dt>Маршрут</dt><dd><b>${E(o.route)}</b></dd>` : ""}<dt>Место назначения</dt><dd>${E(o.dest)}</dd><dt>Отправлен</dt><dd>${u.dLong(o.sentAt)}</dd><dt>${o.status === "way" ? "Прибытие" : "Прибыл в Москву"}</dt><dd>${o.status === "way" ? "около " + u.dLong(o.eta) : u.dLong(o.arrivedAt)}</dd>
+        + `<dl class="kv">${ttRow(t, o)}<dt>Вид доставки</dt><dd>${E(TR(o.transport).label)}</dd>${seeRoute() ? `<dt>Маршрут</dt><dd><b>${E(o.route)}</b></dd>` : ""}<dt>Место назначения</dt><dd>${E(o.dest)}</dd><dt>Отправлен</dt><dd>${u.dLong(o.sentAt)}</dd><dt>${o.status === "way" ? "Прибытие" : "Прибыл в Москву"}</dt><dd>${o.status === "way" ? "ориентировочно " + st.rangeText(st.trip(o).from, st.trip(o).to) : u.dLong(o.arrivedAt)}</dd>
           <dt>Мест</dt><dd>${u.places(x.places)}</dd><dt>Вес и объём</dt><dd>${u.kg(x.weight)} · ${u.vol(x.volume)}</dd>${o.status === "arrived" ? `<dt>Сейчас</dt><dd>${subPill(o)}</dd>` : ""}</dl>
         ${o.status !== "way" ? `<div data-hl="ship-story"><h3 class="h3">После прибытия</h3>${storyHtml(o)}${o.status === "done" ? repHtml(o) : ""}${ord && o.status !== "done" ? `<dl class="kv mt8"><dt>Получатель</dt><dd>${E(ord.recv.name) || '<span class="muted">не указан</span>'}${ord.recv.phone ? ", " + E(ord.recv.phone) : ""}</dd><dt>Адрес</dt><dd class="tt-dd">${E(ord.recv.addr) || '<span class="muted">не указан</span>'}${ord.recv.addr ? copyBtn(ord.recv.addr) : ""}</dd><dt>Способ выдачи</dt><dd>${E(wayText(ord))}</dd></dl>` : ""}</div>` : ""}
         ${cg ? `<div data-hl="ship-pack"><h3 class="h3">Груз и упаковка</h3><dl class="kv"><dt>Наименование</dt><dd>${E(cg.name) || '<span class="muted">не указано</span>'}</dd><dt>Упаковка</dt><dd>${E(st.packsText(cg.packs))}</dd>
@@ -623,7 +624,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
   }
 
   // ---------- история действий ----------
-  const LK = { accept: ["Приёмка", "in"], unknown: ["Приёмка", "unk"], bind: ["Привязка клиента", "in"], packcmd: ["Организация упаковки", "pack"], tt: ["Трек-номер", "pack"], collected: ["Сборка", "pack"], lost: ["Не найден", "unk"], packed: ["Упаковка", "pack"], packdiff: ["Упаковано иначе", "unk"], dispatch: ["Отправка", "way"], edit: ["Изменение", "arrived"], delete: ["Удаление", "unk"], arrive: ["Прибытие", "arrived"], issuecmd: ["Команда на выдачу", "arrived"], issueacc: ["Принят складом", "arrived"], issue: ["Выдача", "done"], pay: ["Оплата", "in"], money: ["Деньги", "pack"], apay: ["Оплата агенту", "way"], dir: ["Настройки", "wait"], wop: ["Взаиморасчёты", "way"], client: ["Клиент", "wait"], access: ["Доступ", "wait"], doc: ["Документ", "wait"], expected: ["Трек клиента", "wait"] };
+  const LK = { news: ["Новости", "in"], accept: ["Приёмка", "in"], unknown: ["Приёмка", "unk"], bind: ["Привязка клиента", "in"], packcmd: ["Организация упаковки", "pack"], tt: ["Трек-номер", "pack"], collected: ["Сборка", "pack"], lost: ["Не найден", "unk"], packed: ["Упаковка", "pack"], packdiff: ["Упаковано иначе", "unk"], dispatch: ["Отправка", "way"], edit: ["Изменение", "arrived"], delete: ["Удаление", "unk"], arrive: ["Прибытие", "arrived"], issuecmd: ["Команда на выдачу", "arrived"], issueacc: ["Принят складом", "arrived"], issue: ["Выдача", "done"], pay: ["Оплата", "in"], money: ["Деньги", "pack"], apay: ["Оплата агенту", "way"], dir: ["Настройки", "wait"], wop: ["Взаиморасчёты", "way"], client: ["Клиент", "wait"], access: ["Доступ", "wait"], doc: ["Документ", "wait"], expected: ["Трек клиента", "wait"] };
   // к какому грузу относится запись: наш трек-номер, если он есть в цепочке, иначе номер прихода
   const logRef = (e) => e.ids.find((x) => !/^П-0\d+$/.test(x)) || e.ids[0];
   function histList() {
@@ -733,7 +734,7 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
     taskPack: (d) => {
       const t = st.task(d.id), x = App.tmp.tp; if (!t || !x || x.id !== d.id || !can("packcmd")) return;
       if (t.status === "collect" && !st.collect(t.id, x.found.slice(), actor())) return;
-      const c = st.pack(t.id, { packs: x.packs, dims: x.dims, weight: u.parse(x.weight), photos: x.photos, note: x.note, by: actor() });
+      const c = st.pack(t.id, { packs: x.packs, dims: x.dims, weight: u.parse(x.weight), volume: u.parse(x.volMan), photos: x.photos, note: x.note, by: actor() });
       App.tmp.tp = null;
       if (c) { openItem("cargo", c.id); App.toast(`Груз ${c.id} упакован, клиент получил уведомление`, "check"); if (App.scenario) App.scenario.check("packed", c); }
     },
@@ -794,6 +795,13 @@ ${o.packDiff ? `<div class="note warn" data-hl="pack-diff">Упаковано и
       const isNew = !x.id, c = st.saveClient(x, actor()); if (!c) return;
       App.tmp.cl = null; App.closeDesk(); App.go.desk("client", c.id);
       App.toast(isNew ? `Клиент ${c.id} создан${c.salesId ? ", менеджер " + st.who(c.salesId) : ""}` : `Карточка клиента ${c.id} сохранена, запись в истории`, "user");
+    },
+    // «Копировать» в блоке выдачи: весь блок одним текстом (заказ или то, что сейчас введено в окне «Выдать»)
+    copyIss: (d) => {
+      const x = App.tmp.iss, o = d.id ? st.issueOrder(d.id) : x ? { way: x.way, tk: x.tk, recv: x.recv, dlv: x.way !== "pickup" ? { payer: x.dlvPayer, rub: u.parse(x.dlvRub), wh: x.dlvWh } : null } : null; if (!o) return;
+      const t = st.issueText(o); App.lastCopy = t;
+      try { if (navigator.clipboard) navigator.clipboard.writeText(t).catch(() => {}); } catch (e) { /* без буфера обмена */ }
+      App.toast("Скопировано", "copy");
     },
     copy: (d) => { try { if (navigator.clipboard) navigator.clipboard.writeText(d.v).catch(() => {}); } catch (e) { /* без буфера обмена */ } App.toast(`${d.w || "Адрес"} скопирован: ${d.v}`, "copy"); },
   };

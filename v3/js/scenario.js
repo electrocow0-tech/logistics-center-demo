@@ -130,13 +130,13 @@
         if (!(App.tmp.psel || []).includes(id)) return { sel: `[data-wp="${id}"]`, tip: "Склад упаковал груз: видны виды упаковки, места, вес и объём. Отметьте его." };
         return { sel: "#btnSend", tip: "Нажмите «Отправить». Можно отметить сразу несколько грузов." };
       } },
-    { k: "seen", who: ["user", "Клиент"], t: "Клиент видит трек-номер и маршрут",
-      p: "Клиент следит за грузом по нашему трек-номеру: маршрут, дата прибытия и стоимость в долларах вместе с доставкой до склада.",
+    { k: "seen", who: ["user", "Клиент"], t: "Клиент видит трек-номер и шкалу пути",
+      p: "Клиент следит за грузом по нашему трек-номеру: дата прибытия диапазоном, из чего сложилась стоимость, фото до и после упаковки и шкала пути, которая сама идёт по дням. Маршрут (агента) клиент не видит.",
       go: () => goPhone("client", "citem", "ship:" + sc().ttId), manual: true,
       hint: () => {
         const n = needPhone("client", ["citem", "ships"], "ships", "Грузы"); if (n) return n;
         const s = App.ui.slots[1], id = sc().ttId;
-        if (s.screen === "citem" && s.p === "ship:" + id) return { sel: ps("client", '[data-hl="client-track"]'), tip: "Наш трек-номер, маршрут и дата прибытия. Ниже стоимость в долларах: в неё вошла доставка до склада.", act: "scnNext", actLabel: "Дальше", pri: true };
+        if (s.screen === "citem" && s.p === "ship:" + id) return { sel: ps("client", '[data-hl="client-track"]'), tip: "Наш трек-номер и ориентировочная дата прибытия. Ниже места, вес, объём, упаковка, страховка, расходы в Китае, доставка и итог к оплате, фото до и после упаковки и шкала пути: она сама меняет этап по дням.", act: "scnNext", actLabel: "Дальше", pri: true };
         return { sel: ps("client", `[data-ci="ship:${id}"]`), tip: "Откройте отправленный груз." };
       } },
     { k: "arrive", who: ["pin", "Администратор"], t: "Груз прибыл в Москву",
@@ -235,6 +235,28 @@
         if (App.modalOpen()) return closeTip();
         if (App.tmp.stab !== "agents") return { sel: '[data-stab="agents"]', tip: "Откройте вкладку «Агенты»." };
         return { sel: '[data-hl="dir-agents"]', tip: "Агенты по маршрутам: ставка за кг или за м³, растаможка, срок в пути. Новый агент сразу появится в окне «Отправить». Рядом вкладки упаковки, страховки, складов, транспортных компаний и курсов валют.", act: "scnNext", actLabel: "Дальше", pri: true };
+      } },
+    { k: "news", who: ["news", "Администратор"], t: "Новость для клиентов",
+      p: "В разделе «Новости и рассылки» администратор пишет объявление, поздравление или важное сообщение: всем клиентам или выбранным, сразу или к нужной дате. Видно, сколько клиентов прочитали.",
+      go: () => goDesk("news"),
+      hint: () => {
+        const n = needDesk("news", "Новости и рассылки"); if (n) return n;
+        if (App.modalOpen()) {
+          if (App.tmp.mk !== "nwd") return closeTip();
+          const d = App.tmp.nwd || {};
+          if (!String(d.title || "").trim() || !String(d.text || "").trim()) return { sel: '#modal [data-hl="nwd-title"]', tip: "Заголовок, текст и картинка по желанию. Ниже: кому (все или выбранные клиенты) и когда.", act: "nwFill", actLabel: "Заполнить за меня" };
+          return { sel: "#btnNwGo", tip: "Нажмите «Опубликовать»: каждому клиенту придёт уведомление, новость появится у него во вкладке «Новости»." };
+        }
+        return { sel: "#btnNewsNew", tip: "Список новостей: кому ушли и сколько клиентов прочитали. Нажмите «Новая новость»." };
+      } },
+    { k: "cnews", who: ["user", "Клиент"], t: "Клиент читает новость", manual: true,
+      p: "У клиента пятая вкладка «Новости»: на ней число непрочитанных. Открытая новость отмечается прочитанной, администратор видит это в списке.",
+      go: () => goPhone("client", "news"),
+      hint: () => {
+        const n = needPhone("client", ["news", "newsi"], "news", "Новости"); if (n) return n;
+        const s = App.ui.slots[1], id = sc().newsId;
+        if (s.screen === "newsi") return { sel: ps("client", '[data-hl="client-news"]'), tip: "Новость прочитана: счётчик на вкладке уменьшился, у администратора выросло число прочитавших.", act: "scnNext", actLabel: "Дальше", pri: true };
+        return { sel: ps("client", id ? `[data-nwi="${id}"]` : "[data-nwi]"), tip: "Новая новость сверху, непрочитанные отмечены точкой. Откройте её." };
       } },
     { k: "staff", who: ["shield", "Администратор"], t: "Менеджер по продажам и его доступ",
       p: "Администратор сам создаёт сотрудника и выбирает набор прав. Менеджер по продажам видит только своих клиентов, может организовать упаковку их грузов, маршрут ему не показывается.",
@@ -434,6 +456,7 @@
     if (k === "maccept" && ev === "issueacc" && data.id === s.issId) { next(1700); return; }
     if (k === "mrep" && ev === "issued" && data.id === s.ttId) { next(2000); return; }
     if (k === "agent" && ev === "agentpaid" && data.route === "89G") { next(1900); return; }
+    if (k === "news" && ev === "news" && data && data.status === "sent") { s.newsId = data.id; App.saveUI(); next(1900); return; }
     if (k === "staff" && ev === "staffNew") { s.staffId = data; App.saveUI(); }
     if (k === "staff" && ev === "viewAs") { s.seen = true; App.saveUI(); }
     if (k === "staff" && ev === "viewBack" && s.seen) { next(900); return; }
@@ -445,7 +468,7 @@
 
   function start() {
     App.closeOverlay(); App.ui.introSeen = true;
-    const s = sc(); s.on = true; s.step = 0; s.track = null; s.recId = null; s.ttId = null; s.staffId = null; s.issId = null; s.seen = false; App.ui.viewAs = null;
+    const s = sc(); s.on = true; s.step = 0; s.track = null; s.recId = null; s.ttId = null; s.staffId = null; s.issId = null; s.newsId = null; s.seen = false; App.ui.viewAs = null;
     App.tmp.acc = null; App.tmp.aw = null; App.tmp.csel = []; App.tmp.psel = []; App.tmp.org = null; App.tmp.snd = null; App.tmp.nst = null; App.tmp.wq = ""; App.tmp.asel = []; App.tmp.iss = null; App.tmp.mrep = {}; scrolledFor = ""; pending = false;
     App.saveUI(); goStep(0);
   }

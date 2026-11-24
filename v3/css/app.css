@@ -1045,12 +1045,12 @@ span.sw{display:inline-block}
 .choice.cols4 button{justify-content:center;text-align:center;padding:8px 6px;font-size:13px}
 /* упаковка: количество по видам, размеры строками, объём считается сам */
 .dims{display:grid;gap:6px;margin-bottom:8px}
-.dim{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto;gap:4px;align-items:center}
-.dim i{font-style:normal;color:var(--faint);font-size:13px}
-.dim .inp{padding:0 4px;text-align:center;height:40px;font-size:14px}
-.dim .inp::placeholder{font-size:11.5px}
-.dim .x{margin:0}
-.dim .x[disabled]{opacity:.25;pointer-events:none}
+.dimr{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr) auto;gap:4px;align-items:center}
+.dimr i{font-style:normal;color:var(--faint);font-size:13px}
+.dimr .inp{padding:0 4px;text-align:center;height:40px;font-size:14px}
+.dimr .inp::placeholder{font-size:11.5px}
+.dimr .x{margin:0}
+.dimr .x[disabled]{opacity:.25;pointer-events:none}
 .tp-packs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .tp-packs label{display:grid;gap:4px;font-size:11.5px;color:var(--muted);min-width:0}
 .tp-packs label span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1454,3 +1454,142 @@ button.kpi{font:inherit;color:inherit;cursor:pointer}
 @media(max-width:699px){
   .agr-tot{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* ===== версия 3.3: строки размеров, объём вручную, шкала пути, кабинет клиента, новости, способы расчёта денег ===== */
+.ell2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-width:0}
+.mb12{margin-bottom:12px}
+textarea.inp{height:auto;min-height:96px;padding:10px 12px;resize:vertical;line-height:1.45;display:block}
+.fld>span em.ok{font-style:normal;margin-left:6px;font-size:11.5px}
+/* объём вручную у склада */
+.pvol{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin-top:8px;min-height:30px}
+.pvol .s12{min-width:0}
+/* шкала пути: заполнение через transform, без сдвигов; при первом показе плавно заполняется */
+.trip{display:grid;gap:7px;padding:2px 0 12px;margin-bottom:12px;border-bottom:1px solid var(--line-2)}
+.box .trip{border-bottom:0;margin-bottom:0;padding-bottom:4px}
+.trip-h{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.trip-n{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:14px;min-width:0;flex-wrap:wrap}
+.trip-p{font-size:20px;font-weight:700;color:var(--accent-d);letter-spacing:-.02em;flex:none}
+.trip-bar{position:relative;height:10px;border-radius:5px;background:var(--soft);overflow:hidden;box-shadow:inset 0 0 0 1px var(--line-2)}
+.trip-bar i{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),#14b583);border-radius:5px;transform-origin:0 50%;will-change:transform}
+.trip.anim .trip-bar i{animation:tripFill 1.1s var(--ease) both}
+@keyframes tripFill{from{transform:scaleX(0)}}
+.trip-bar em{position:absolute;top:2px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:rgba(15,27,45,.18)}
+.trip-bar em.on{background:#fff}
+.trip-f{display:flex;justify-content:space-between;gap:4px 10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.trip-f span{min-width:0}
+.trip.full .trip-p{color:var(--accent)}
+.trip-mini{display:block;position:relative;height:5px;border-radius:3px;background:var(--soft);overflow:hidden;margin:9px 0 2px}
+.trip-mini i{position:absolute;inset:0;background:var(--accent);border-radius:3px;transform-origin:0 50%}
+/* карточка груза у клиента: итог, фото до и после, приходы */
+.pline.ptot{font-size:15px;font-weight:700}
+.pline.ptot b{font-size:18px;color:var(--ink)}
+.phl{font-size:12px;color:var(--muted);font-weight:600;margin:10px 0 -4px}
+.crec{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;text-align:left;padding:10px 0;border-bottom:1px solid var(--line-2);color:var(--ink)}
+.crec:last-child{border-bottom:0;padding-bottom:2px}
+.crec .ph-i{width:52px;border-radius:9px}
+.crec .ct{display:grid;gap:1px;min-width:0}
+.crec .ct b{font-size:13px;overflow-wrap:anywhere}
+.crec .ct small{color:var(--muted);font-size:12px;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.crec>.ic{width:16px;height:16px;color:var(--faint)}
+/* новости у клиента */
+.nwc .t{gap:8px}
+.nwc-b{display:flex;gap:10px;align-items:flex-start;margin-top:8px;min-width:0}
+.nwc-b .ph-i{width:64px;flex:none;border-radius:10px}
+.nwc-b .ct{display:grid;gap:3px;min-width:0}
+.nwc-b .ct b{font-size:14px;white-space:normal;line-height:1.3}
+.nwc-b .ct small.ell2{white-space:normal;display:-webkit-box}
+.nwc-b .ct small{color:var(--muted);font-size:12.5px;line-height:1.4}
+.nwc.unread{box-shadow:var(--sh-1),inset 3px 0 0 var(--accent)}
+.nw-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--alert);margin-right:6px;vertical-align:1px}
+.nwd-h{margin:10px 0 10px;font-size:19px;line-height:1.25;letter-spacing:-.01em}
+.nwd-ph{margin-bottom:10px}
+.nwd-t{font-size:14px;line-height:1.5;margin:0 0 10px;white-space:pre-line}
+/* новости у администратора */
+.nw-t{display:flex;align-items:center;gap:10px;min-width:0;max-width:420px}
+.nw-ph{width:48px;height:36px;border-radius:8px;overflow:hidden;flex:none;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.nw-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.nw-ph .ic{width:18px;height:18px}
+.nw-t .ct{display:grid;min-width:0}
+.nw-t .ct small{color:var(--muted);font-size:12px}
+.nw-bar{position:relative;height:5px;border-radius:3px;background:var(--soft);overflow:hidden;margin-top:5px;width:90px;margin-left:auto}
+.nw-bar i{position:absolute;inset:0;background:var(--accent);transform-origin:0 50%}
+.tbx>[data-hl="news-t"]{min-width:820px}
+.nw-img{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.nw-img button{aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:var(--soft);border:2px solid transparent;padding:0;display:grid;place-items:center;transition:border-color .15s}
+.nw-img button img{width:100%;height:100%;object-fit:cover;display:block}
+.nw-img button span{display:grid;justify-items:center;gap:4px;font-size:11.5px;font-weight:600;color:var(--muted);padding:4px;text-align:center}
+.nw-img button.on{border-color:var(--accent)}
+.nw-cl{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;margin-top:8px}
+.nw-cl .prow{margin-top:0}
+.nw-big{border-radius:14px;overflow:hidden;aspect-ratio:16/7;margin-bottom:12px}
+.nw-big img{width:100%;height:100%;object-fit:cover;display:block}
+.nw-txt{font-size:14px;line-height:1.5;margin:0;white-space:pre-line}
+.nw-rd .pline.mini{border-bottom:1px solid var(--line-2)}
+/* этапы пути у агента */
+.stgs{display:grid;gap:6px}
+.stg-r{display:grid;grid-template-columns:minmax(0,1fr) 110px auto;gap:6px;align-items:center}
+.stg-d{display:flex;align-items:center;gap:6px;min-width:0}
+.stg-d em{font-style:normal;font-size:12px;color:var(--muted);flex:none}
+.stg-r .x{margin:0}
+.stg-t{min-width:220px;max-width:300px;font-size:12.5px}
+.tbx>[data-hl="dir-agents"]{min-width:980px}
+.tbx>.ag-t{min-width:980px}
+/* способ расчёта доставки и суммы агенту */
+.mmode .choice.cols3 button{min-height:40px}
+.mm-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.mm-r .inp{flex:1 1 140px;width:auto}
+.mm-r .seg{flex:none}
+.mm-c{font-size:12.5px;color:var(--accent-d);background:var(--accent-soft);border-radius:10px;padding:8px 10px;overflow-wrap:anywhere;min-width:0}
+@media (max-width:699px){
+  .nw-img{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stg-r{grid-template-columns:minmax(0,1fr) 92px auto}
+  .mmode .choice.cols3{grid-template-columns:minmax(0,1fr)}
+  .mmode .choice.cols3 button{min-height:38px}
+}
+/* доставка до двери или ТК в окне «Выдать» */
+.iss-dlv{padding:12px;border-radius:14px;background:var(--soft-2);box-shadow:0 0 0 1px var(--line-2)}
+.iss-dlv .fld>span em{font-style:normal;font-size:11.5px;margin-left:4px}
+.dlv-wh{align-self:end;min-height:44px}
+@media (max-width:699px){.iss-dlv .row2{grid-template-columns:minmax(0,1fr)}}
+/* блок выдачи: «Копировать» в правом верхнем углу, адрес на всю ширину */
+.ib{padding:4px 0 10px;border-bottom:1px solid var(--line-2)}
+.ib-h{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13.5px;min-width:0}
+.ib-h .lnkb{flex:none}
+.ib-w{display:block;font-weight:600;font-size:14px;margin-top:4px;overflow-wrap:anywhere}
+.pline.ib-a{flex-direction:column;align-items:flex-start;gap:3px}
+.pline.ib-a>b{text-align:left;font-weight:600}
+.ib-hd{margin-bottom:6px}
+.ib-hd h3{margin:0}
+/* отчёты: период, объём и вес, график с переключателем, таблица по маршрутам */
+.rep-f{margin-bottom:14px}
+.kpi .kpi-2{font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1.2;white-space:nowrap}
+.kpi.hero .kpi-2{color:#fff}
+.rep-g{align-items:start}
+.rep-l{display:grid;min-width:0}
+.rep-h{gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.rep-h h3{margin:0;min-width:0}
+.rep-h h3 small{font-weight:500;font-size:12px}
+.bars.many{gap:3px}
+.bars.many .b{border-radius:4px 4px 2px 2px}
+.bars .bcol small{white-space:nowrap}
+.tbx.flat{box-shadow:none;border-radius:0;background:transparent}
+.tbl tr.tot td{font-weight:700;border-top:1.5px solid var(--line)}
+.tbx>[data-hl="rep-routes"],.box[data-hl="rep-routes"] .tbl{min-width:320px}
+.bars .b.z{min-height:2px;height:2px!important;background:var(--line)}
+.bars.many .bcol small{position:relative;z-index:1;font-size:10.5px}
+.rep-h h3{flex:1 1 220px}
+@media (max-width:699px){.rep-h h3 small{display:block}.bars.many{gap:2px}}
+.bars .bcol small{display:block;min-height:15px;line-height:15px}
+/* «Склады в Китае» и наша цена упаковки в настройках */
+.dir-2{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.cw-f{flex-wrap:wrap;gap:8px 12px;margin-bottom:14px}
+.cw-in .inp{width:96px;text-align:right}
+.cw-s{margin-top:12px}
+.tbx>.cw-t{min-width:640px}
+.cw-l{min-width:620px}
+.cw-in em{min-width:0}.cw-in{justify-content:flex-end}
+.bars.many .bcol{justify-items:stretch}
+.bars.many .bcol small{width:0;justify-self:center;display:flex;justify-content:center;overflow:visible}
+.bars.many .bcol:last-child small{justify-self:end;justify-content:flex-end}
+.bars.many .bcol:first-child small{justify-self:start;justify-content:flex-start}
+.bars.many .b{max-width:none}

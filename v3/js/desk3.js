@@ -170,8 +170,17 @@
   function issStart(ids, from) {
     const list = ids.map(st.ship).filter((s) => s && s.status === "arrived" && s.sub === "store" && vis(s)); if (!list.length || !can("issuecmd")) return;
     const cid = list[0].clientId, x = list.filter((s) => s.clientId === cid).map((s) => s.id), c = st.client(cid) || {}, r = c.recv || {}, debt = st.debtRub(x);
-    App.tmp.iss = { ids: x, clientId: cid, recv: { name: r.name || c.person || "", phone: r.phone || c.phone || "", addr: r.addr || "" }, way: st.WAY[r.way] ? r.way : "pickup", tk: r.tk || st.TK[0], payer: "client", collect: debt > 0, collectRub: debt > 0 ? String(debt) : "", note: "", from: from || null, picked: false };
+    App.tmp.iss = { ids: x, clientId: cid, recv: { name: r.name || c.person || "", phone: r.phone || c.phone || "", addr: r.addr || "" }, way: st.WAY[r.way] ? r.way : "pickup", tk: r.tk || st.TK[0], payer: "client", collect: debt > 0, collectRub: debt > 0 ? String(debt) : "", note: "", from: from || null, picked: false, dlvPayer: "client", dlvRub: "", dlvWh: true };
     issModal();
+  }
+  // доставка до двери или транспортной компанией: отдельный блок, кто платит и сумма (можно внести позже)
+  const dlvAdd = (d) => (d.way !== "pickup" && d.dlvPayer === "client" && u.parse(d.dlvRub) > 0 ? `плюс ${d.way === "tk" ? "доставка ТК" : "доставка до двери"} ${st.rub(u.parse(d.dlvRub))}: к получению ${st.rub(u.parse(d.collectRub) + u.parse(d.dlvRub))}` : "");
+  function dlvBlock(d) {
+    const tk = d.way === "tk";
+    return `<div class="fld mt iss-dlv" data-hl="iss-dlv"><span>${tk ? "Доставка транспортной компанией (например, Москва → Санкт-Петербург)" : "Доставка до двери (машина)"}</span>
+      <div class="choice cols2">${[["client", "Платит клиент", "прибавится к стоимости груза и к оплате при выдаче"], ["us", "Платим мы", "наш расход по грузу"]].map(([k, t, x]) => `<button type="button" class="${d.dlvPayer === k ? "on" : ""}" data-act="issDlvPayer" data-k="${k}" data-idp="${k}"><span>${t}<small>${x}</small></span></button>`).join("")}</div>
+      <div class="row2 mt8"><label class="fld"><span>Сумма, ₽ <em class="muted">можно внести позже</em></span><input class="inp" data-in="issIn" data-k="dlvRub" id="issDlv" inputmode="numeric" value="${E(d.dlvRub)}" placeholder="например, 3500" data-enter="#btnIssueGo"></label>
+        ${d.dlvPayer === "us" ? `<div class="swr dlv-wh"><span><b>Платит склад в Москве</b><small>операция во взаиморасчётах после выдачи</small></span><button class="sw${d.dlvWh ? " on" : ""}" type="button" data-act="issDlvWh" id="issDlvWh" aria-label="Платит склад в Москве"><i></i></button></div>` : ""}</div></div>`;
   }
   function issModal() {
     const d = App.tmp.iss; if (!d) return;
@@ -182,13 +191,14 @@
       <div class="fld" data-hl="iss-tracks"><span>Треки в заказе: лишний можно убрать</span><div class="chips">${ss.map((s) => { const t = st.totals(s); return `<span class="chipx" data-ic="${E(s.id)}"><b class="mono">${E(s.id)}</b><small>${u.places(t.places)} · ${u.kg(t.weight)}</small><button type="button" data-act="issDrop" data-id="${E(s.id)}" aria-label="Убрать из заказа" ${ss.length > 1 ? "" : "disabled"}>${I("x")}</button></span>`; }).join("")}</div></div>
       <h3 class="h3 mt2">Получатель</h3>
       <div class="row2" data-hl="iss-recv"><label class="fld"><span>ФИО получателя</span><input class="inp" data-in="issRecv" data-k="name" value="${E(d.recv.name)}" placeholder="Кто принимает груз" autocomplete="off"></label><label class="fld"><span>Телефон</span><input class="inp" data-in="issRecv" data-k="phone" value="${E(d.recv.phone)}" placeholder="+7 900 000-00-00" inputmode="tel" autocomplete="off"></label></div>
-      <div class="fld mt"><span class="row"><span class="grow">Адрес</span><span id="issCopy"${d.recv.addr ? "" : " hidden"}>${K.copyBtn(d.recv.addr)}</span></span><input class="inp" data-in="issRecv" data-k="addr" value="${E(d.recv.addr)}" placeholder="Город, улица, дом, как проехать" autocomplete="off"></div>
+      <div class="fld mt"><span>Адрес</span><input class="inp" data-in="issRecv" data-k="addr" value="${E(d.recv.addr)}" placeholder="Город, улица, дом, как проехать" autocomplete="off"></div>
       <p class="muted s12 mt8 p0">Подставлено из карточки клиента, для этой выдачи можно исправить.</p>
-      <div class="fld mt"><span>Способ выдачи</span><div class="choice cols3" data-hl="iss-way">${Object.keys(st.WAY).map((k) => `<button type="button" class="${d.way === k ? "on" : ""}" data-act="issWay" data-k="${k}" data-iw="${k}">${I(st.WAY[k].ic)}${st.WAY[k].t}</button>`).join("")}</div></div>
+      <div class="fld mt"><span class="row"><span class="grow">Способ выдачи</span><button class="lnkb" type="button" data-act="copyIss" id="issCopy" title="Скопировать способ выдачи, получателя и адрес одним текстом">${I("copy")}Копировать</button></span><div class="choice cols3" data-hl="iss-way">${Object.keys(st.WAY).map((k) => `<button type="button" class="${d.way === k ? "on" : ""}" data-act="issWay" data-k="${k}" data-iw="${k}">${I(st.WAY[k].ic)}${st.WAY[k].t}</button>`).join("")}</div></div>
       ${d.way === "tk" ? `<div class="fld mt"><span>Транспортная компания</span><div class="choice cols3" data-hl="iss-tk">${st.TK.map((k) => `<button type="button" class="${d.tk === k ? "on" : ""}" data-act="issTk" data-k="${E(k)}">${E(k)}</button>`).join("")}</div></div>` : ""}
-      <div class="fld mt"><span>Расходы при выдаче: погрузка, снять паллет, кара</span><div class="choice cols2" data-hl="iss-payer">${[["client", "Платит клиент", "прибавятся к стоимости груза"], ["us", "Платим мы", "за счёт компании"]].map(([k, t, s]) => `<button type="button" class="${d.payer === k ? "on" : ""}" data-act="issPayer" data-k="${k}" data-ip="${k}"><span>${t}<small>${s}</small></span></button>`).join("")}</div></div>
+      ${d.way !== "pickup" ? dlvBlock(d) : ""}
+      <div class="fld mt"><span>Расходы склада при выдаче (погрузка, снять паллет, кара)</span><div class="choice cols2" data-hl="iss-payer">${[["client", "Платит клиент", "прибавятся к стоимости груза"], ["us", "Платим мы", "за счёт компании"]].map(([k, t, s]) => `<button type="button" class="${d.payer === k ? "on" : ""}" data-act="issPayer" data-k="${k}" data-ip="${k}"><span>${t}<small>${s}</small></span></button>`).join("")}</div></div>
       <div class="iss-pay mt" data-hl="iss-collect"><div class="swr"><span><b>Получить оплату при выдаче</b><small>${debt ? "долг по выбранным трекам " + st.rub(debt) : "по выбранным трекам долга нет"}</small></span><button class="sw${d.collect ? " on" : ""}" type="button" data-act="issCollect" id="issCollect" aria-label="Получить оплату при выдаче"><i></i></button></div>
-        ${d.collect ? `<label class="fld mt8"><span>Сумма, ₽</span><input class="inp" data-in="issIn" data-k="collectRub" id="issSum" inputmode="numeric" value="${E(d.collectRub)}" placeholder="0" data-enter="#btnIssueGo"></label>` : ""}</div>
+        ${d.collect ? `<label class="fld mt8"><span>Сумма, ₽</span><input class="inp" data-in="issIn" data-k="collectRub" id="issSum" inputmode="numeric" value="${E(d.collectRub)}" placeholder="0" data-enter="#btnIssueGo"></label><div class="req left" id="issDlvAdd">${dlvAdd(d)}</div>` : ""}</div>
       <label class="fld mt"><span>Примечание для склада</span><input class="inp" data-in="issIn" data-k="note" value="${E(d.note)}" placeholder="Например: позвонить за час до приезда" autocomplete="off"></label>
       <div class="found mt">${I("bell")}<span>Заказ уйдёт складу в Москве в раздел «Готов к выдаче»<small>клиент получит уведомление: способ выдачи${d.collect ? " и сумма к оплате" : ""}</small></span></div>
       <div class="mf"><button class="btn" type="button" data-act="issBack">Отмена</button><button class="btn pri" type="button" data-act="issGo" id="btnIssueGo">${I("check")}Готово</button></div>`, "wide");
@@ -211,8 +221,8 @@
     K.show("issc", `<div class="mh"><div class="mi">${I("file")}</div><div><h2>Заказ на выдачу ${E(o.id)}</h2><div class="muted s13 io-s"><span class="tag code">${E(c.id)}</span>${cl} · ${st.tracksWord(ss.length)}, ${sumText(ss)}</div></div>${ordPill(o, true)}${xBtn}</div>
       <div class="io-l" data-hl="io-tracks">${rows}</div>
       <div class="io-g mt">
-        <div class="box flat" data-hl="io-recv"><h3>${I("pin")}Получатель и выдача</h3><dl class="kv"><dt>Получатель</dt><dd>${E(o.recv.name) || '<span class="muted">не указан</span>'}</dd><dt>Телефон</dt><dd>${E(o.recv.phone) || '<span class="muted">не указан</span>'}</dd>
-          <dt>Адрес</dt><dd class="tt-dd">${E(o.recv.addr) || '<span class="muted">не указан</span>'}${o.recv.addr ? K.copyBtn(o.recv.addr) : ""}</dd><dt>Способ выдачи</dt><dd>${E(K.wayText(o))}</dd><dt>Расходы при выдаче</dt><dd>${o.payer === "client" ? "платит клиент" : "платим мы"}</dd>
+        <div class="box flat" data-hl="io-recv"><div class="row ib-hd"><h3 class="grow">${I("pin")}Получатель и выдача</h3><button class="lnkb" type="button" data-act="copyIss" data-id="${E(o.id)}" id="ordCopy">${I("copy")}Копировать</button></div><dl class="kv"><dt>Получатель</dt><dd>${E(o.recv.name) || '<span class="muted">не указан</span>'}</dd><dt>Телефон</dt><dd>${E(o.recv.phone) || '<span class="muted">не указан</span>'}</dd>
+          <dt>Адрес</dt><dd>${E(o.recv.addr) || '<span class="muted">не указан</span>'}</dd><dt>Способ выдачи</dt><dd>${E(K.wayText(o))}</dd>${o.dlv ? `<dt>${E(st.dlvLabel(o))}</dt><dd data-odlv="${E(o.id)}">${E(st.dlvText(o).replace(/^[^:]+: /, ""))}</dd>` : ""}<dt>Расходы склада при выдаче</dt><dd>${o.payer === "client" ? "платит клиент" : "платим мы"}</dd>
           <dt>Получить оплату</dt><dd>${o.collect ? st.rub(o.collectRub) : '<span class="muted">не нужно</span>'}${due > (o.collect ? o.collectRub : 0) ? `<span class="muted s12 blk">с расходами при выдаче ${st.rub(due)}</span>` : ""}</dd>${o.gotRub ? `<dt>Получено</dt><dd class="ok">${st.rub(o.gotRub)}, ${u.when(o.gotAt)}</dd>` : ""}
           ${o.note ? `<dt>Примечание</dt><dd>${E(o.note)}</dd>` : ""}</dl>
           ${rest > 0 && o.status !== "ready" && canI ? `<div class="found bad mt8">${I("wallet")}<span>Получить с клиента: ${st.rub(rest)}<small>отметьте, когда склад получит деньги</small></span><button class="btn sm" type="button" data-act="issPaid" data-id="${E(o.id)}" id="btnIssPaid">Получено</button></div>` : ""}</div>
@@ -225,7 +235,7 @@
   // ---------- фотоотчёт и выдача за склад в Москве: та же форма, что у склада. Ни одно поле не обязательно ----------
   function repStart(id, from) {
     const s = st.ship(id), o = st.issueOf(s); if (!s || !o || s.status !== "arrived" || s.sub !== "issuing" || !can("issue")) return;
-    if (!App.tmp.rep || App.tmp.rep.id !== id) App.tmp.rep = { id, oid: o.id, photos: [], dmg: null, dmgText: "", exp: { load: "", pallet: "", fork: "", other: "" }, note: "", waybill: "", from: from || null };
+    if (!App.tmp.rep || App.tmp.rep.id !== id) App.tmp.rep = { id, oid: o.id, photos: [], dmg: null, dmgText: "", exp: { load: "", pallet: "", fork: "", other: "" }, note: "", waybill: "", dlvRub: o.dlv && o.dlv.rub ? String(o.dlv.rub) : "", from: from || null };
     else App.tmp.rep.from = from || App.tmp.rep.from;
     repModal();
   }
@@ -240,7 +250,8 @@
       <div class="note mt">${I(st.WAY[o.way].ic)}<b>${E(K.wayText(o))}</b>${o.recv.name ? ": " + E(o.recv.name) : ""}${o.recv.phone ? ", " + E(o.recv.phone) : ""}${o.recv.addr && o.way !== "pickup" ? ". " + E(o.recv.addr) : ""}${o.note ? `. Примечание: ${E(o.note)}` : ""}</div>
       <div class="fld mt"><span>Фото при выдаче</span><div class="cam sm" data-hl="rep-photo">${d.photos.map((p) => `<div class="shot">${u.photo(p, c.packType)}</div>`).join("")}${d.photos.length < 4 ? `<button class="add" type="button" data-act="repPhoto" id="btnRepPhoto">${I("camera")}<span>${d.photos.length ? "Ещё" : "Фото"}</span></button>` : ""}</div></div>
       <div class="fld mt"><span>Повреждение</span><div class="choice cols2" data-hl="rep-dmg"><button type="button" class="${d.dmg === "no" ? "on" : ""}" data-act="repDmg" data-k="no">Нет</button><button type="button" class="${d.dmg === "yes" ? "on" : ""}" data-act="repDmg" data-k="yes">Есть</button></div>${d.dmg === "yes" ? `<input class="inp mt8" data-in="repIn" data-k="dmgText" value="${E(d.dmgText)}" placeholder="Что повреждено" autocomplete="off">` : ""}</div>
-      <div class="fld mt"><span>Расходы при выдаче, ₽</span><div class="tp-packs" data-hl="rep-exp">${st.REPX.map(([k, n]) => `<label><span>${n}</span><input class="inp" data-in="repExp" data-k="${k}" inputmode="numeric" value="${E(d.exp[k])}" placeholder="0"></label>`).join("")}</div><div class="req left" id="repSum">${repSumText(d, o)}</div></div>
+      ${o.dlv ? `<label class="fld mt" data-hl="rep-dlv"><span>${E(st.dlvLabel(o))}, ₽ <em class="muted">платит ${o.dlv.payer === "client" ? "клиент" : "компания"}, сумму можно уточнить</em></span><input class="inp" data-in="repIn" data-k="dlvRub" id="repDlv" inputmode="numeric" value="${E(d.dlvRub)}" placeholder="сумма за доставку"></label>` : ""}
+      <div class="fld mt"><span>Расходы склада при выдаче (погрузка, снять паллет, кара), ₽</span><div class="tp-packs" data-hl="rep-exp">${st.REPX.map(([k, n]) => `<label><span>${n}</span><input class="inp" data-in="repExp" data-k="${k}" inputmode="numeric" value="${E(d.exp[k])}" placeholder="0"></label>`).join("")}</div><div class="req left" id="repSum">${repSumText(d, o)}</div></div>
       ${tk ? `<label class="fld mt"><span>Номер накладной ТК ${E(o.tk)}</span><input class="inp mono" data-in="repIn" data-k="waybill" value="${E(d.waybill)}" placeholder="Номер с накладной" autocomplete="off" data-hl="rep-waybill"></label>` : ""}
       <label class="fld mt"><span>Примечание</span><input class="inp" data-in="repIn" data-k="note" value="${E(d.note)}" placeholder="Необязательно" autocomplete="off"></label>
       ${rest > 0 ? `<div class="found bad mt">${I("wallet")}<span>Получить с клиента: ${st.rub(rest)}<small>оплата по заказу ещё не отмечена полученной</small></span><button class="btn sm" type="button" data-act="issPaid" data-id="${E(o.id)}" id="btnRepPaid">Получено</button></div>` : o.gotRub ? `<div class="found mt">${I("check")}<span>Оплата получена: ${st.rub(o.gotRub)}</span></div>` : ""}
@@ -250,7 +261,7 @@
     App.closeOverlay();
     const d = App.tmp.rep; if (!d || !can("issue")) return;
     const exp = {}; st.REPX.forEach(([k]) => { exp[k] = u.parse(d.exp[k]); });
-    const s = st.issueDone(d.id, { photos: d.photos.slice(), damage: d.dmg === "yes" ? d.dmgText.trim() || "Есть повреждение" : "", exp, note: d.note, waybill: d.waybill, by: actor() });
+    const s = st.issueDone(d.id, { photos: d.photos.slice(), damage: d.dmg === "yes" ? d.dmgText.trim() || "Есть повреждение" : "", exp, note: d.note, waybill: d.waybill, dlvRub: d.dlvRub, by: actor() });
     if (!s) return;
     const o = st.issueOf(s), got = paid && o ? st.issueCollect(o.id, actor()) : 0, from = d.from;
     App.tmp.rep = null;
@@ -292,6 +303,8 @@
     issWay: (d) => { const x = App.tmp.iss; if (!x) return; x.way = d.k; if (d.k === "tk" && !x.tk) x.tk = st.TK[0]; x.picked = true; issModal(); },
     issTk: (d) => { if (App.tmp.iss) { App.tmp.iss.tk = d.k; issModal(); } },
     issPayer: (d) => { if (App.tmp.iss) { App.tmp.iss.payer = d.k; issModal(); } },
+    issDlvPayer: (d) => { if (App.tmp.iss) { App.tmp.iss.dlvPayer = d.k; issModal(); } },
+    issDlvWh: () => { if (App.tmp.iss) { App.tmp.iss.dlvWh = !App.tmp.iss.dlvWh; issModal(); } },
     issCollect: () => { const x = App.tmp.iss; if (!x) return; x.collect = !x.collect; if (x.collect && !(u.parse(x.collectRub) > 0)) x.collectRub = String(st.debtRub(x.ids) || ""); issModal(); },
     issFill: () => {
       const x = App.tmp.iss; if (!x) return; const c = st.client(x.clientId) || {};
@@ -301,7 +314,7 @@
     issBack: () => { const x = App.tmp.iss; App.tmp.iss = null; back(x && x.from, x && x.ids[0]); },
     issGo: () => {
       const x = App.tmp.iss; if (!x || !can("issuecmd")) return;
-      const o = st.issueCreate(x.ids.slice(), { recv: x.recv, way: x.way, tk: x.tk, payer: x.payer, collect: x.collect, collectRub: u.parse(x.collectRub), note: x.note, by: actor() });
+      const o = st.issueCreate(x.ids.slice(), { recv: x.recv, way: x.way, tk: x.tk, payer: x.payer, collect: x.collect, collectRub: u.parse(x.collectRub), note: x.note, dlv: x.way !== "pickup" ? { payer: x.dlvPayer, rub: u.parse(x.dlvRub), wh: x.dlvWh } : null, by: actor() });
       App.tmp.iss = null; App.tmp.asel = [];
       if (!o) { App.closeDesk(); return; }
       if (x.from === "card") App.D.openItem("ship", o.shipIds[0]); else App.closeDesk();
@@ -348,8 +361,8 @@
     afDate: (v, el) => { af()[el.dataset.k] = v; App.refresh(true); },
     xfQ: (v) => { xf().q = v; App.refresh(true); },
     xfDate: (v, el) => { xf()[el.dataset.k] = v; App.refresh(true); },
-    issRecv: (v, el) => { const x = App.tmp.iss; if (!x) return; x.recv[el.dataset.k] = v; if (el.dataset.k !== "addr") return; const w = $("issCopy"), b = w && w.querySelector("[data-act=copy]"); if (w) w.hidden = !v.trim(); if (b) b.dataset.v = v.trim(); },
-    issIn: (v, el) => { if (App.tmp.iss) App.tmp.iss[el.dataset.k] = v; },
+    issRecv: (v, el) => { const x = App.tmp.iss; if (!x) return; x.recv[el.dataset.k] = v; },
+    issIn: (v, el) => { const x = App.tmp.iss; if (!x) return; x[el.dataset.k] = v; const o = $("issDlvAdd"); if (o) o.textContent = dlvAdd(x); },
     repIn: (v, el) => { if (App.tmp.rep) App.tmp.rep[el.dataset.k] = v; },
     repExp: (v, el) => { const x = App.tmp.rep; if (!x) return; x.exp[el.dataset.k] = v; const o = st.issueOrder(x.oid), m = $("repSum"); if (m && o) m.textContent = repSumText(x, o); },
   });
